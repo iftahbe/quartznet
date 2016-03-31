@@ -21,6 +21,8 @@ namespace Quartz.Impl.RavenDB
         public int MisfireInstruction { get; set; }
         public DateTimeOffset? EndTimeUtc { get; set; }
         public DateTimeOffset StartTimeUtc { get; set; }
+        public DateTimeOffset? NextFireTimeUtc { get; set; }
+        public DateTimeOffset? PreviousFireTimeUtc { get; set; }
         public int Priority { get; set; }
         public bool HasMillisecondPrecision { get; set; }
 
@@ -76,12 +78,15 @@ namespace Quartz.Impl.RavenDB
             JobDataMap = newTrigger.JobDataMap;
             FinalFireTimeUtc = newTrigger.FinalFireTimeUtc;
             MisfireInstruction = newTrigger.MisfireInstruction;
-            EndTimeUtc = newTrigger.EndTimeUtc;
-            StartTimeUtc = newTrigger.StartTimeUtc;
             Priority = newTrigger.Priority;
             HasMillisecondPrecision = newTrigger.HasMillisecondPrecision;
 
-            IsTimedTrigger = true;
+            EndTimeUtc = newTrigger.EndTimeUtc;
+            StartTimeUtc = newTrigger.StartTimeUtc;
+            NextFireTimeUtc = newTrigger.GetNextFireTimeUtc();
+            PreviousFireTimeUtc = newTrigger.GetPreviousFireTimeUtc();
+
+            IsTimedTrigger = false;
             State = InternalTriggerState.Waiting;
             
             // Init trigger specific properties according to type of newTrigger. 
@@ -196,7 +201,11 @@ namespace Quartz.Impl.RavenDB
             }
 
             var trigger = triggerBuilder.Build();
-            return (IOperableTrigger) trigger;
+
+            ((IOperableTrigger)trigger).SetNextFireTimeUtc(NextFireTimeUtc);
+            ((IOperableTrigger)trigger).SetPreviousFireTimeUtc(PreviousFireTimeUtc);
+
+            return (IOperableTrigger)trigger;
         }
 
     }

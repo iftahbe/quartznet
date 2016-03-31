@@ -10,10 +10,10 @@ namespace Quartz.Impl.RavenDB
         public DateTimeOffset LastCheckinTime { get; set; }
         public DateTimeOffset CheckinInterval { get; set; }
         public string State { get; set; }
-        public IDictionary<string, ICalendar> Calendars { get; set; }
-        public Collection.ISet<string> Locks { get; set; }
-        public Collection.ISet<string> PausedJobGroups { get; set; }
-        public Collection.ISet<string> PausedTriggerGroups { get; set; }
-        public Collection.ISet<SimpleKey> BlockedJobs { get; set; }
+        public Dictionary<string, ICalendar> Calendars { get; set; }
+        public Collection.HashSet<string> Locks { get; set; }
+        public Collection.HashSet<string> PausedJobGroups { get; set; }
+        public Collection.HashSet<string> PausedTriggerGroups { get; set; }
+        public Collection.HashSet<SimpleKey> BlockedJobs { get; set; }
     }
 }  
