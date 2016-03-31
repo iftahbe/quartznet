@@ -81,7 +81,7 @@ namespace Quartz.Impl.RavenDB
             Priority = newTrigger.Priority;
             HasMillisecondPrecision = newTrigger.HasMillisecondPrecision;
 
-            IsTimedTrigger = true;
+            IsTimedTrigger = false;
             State = InternalTriggerState.Waiting;
             
             // Init trigger specific properties according to type of newTrigger. 

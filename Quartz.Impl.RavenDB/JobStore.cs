@@ -176,11 +176,28 @@ namespace Quartz.Impl.RavenDB
                     bulkInsert.Store(new RavenJob(pair.Key), pair.Key.Key.Name + "/" + pair.Key.Key.Group); // Store job first
                     foreach (var trig in pair.Value) // Iterate over a set of triggers
                     {
-                        var ravenTrigger = new RavenTrigger(trig as IOperableTrigger)
+                        var operTrig = trig as IOperableTrigger;
+                        if (operTrig == null) throw new InvalidCastException();
+
+                        var ravenTrigger = new RavenTrigger(operTrig);
+
+                        if (GetPausedTriggerGroups().Contains(operTrig.Key.Group) || GetPausedJobGroups().Contains(operTrig.JobKey.Group))
                         {
-                            State = DetermineNewTriggerState(trig as IOperableTrigger)
-                        };
-                        
+                            ravenTrigger.State = InternalTriggerState.Paused;
+                            if (GetBlockedJobs().Contains(new SimpleKey(operTrig.JobKey.Name, operTrig.JobKey.Group)))
+                            {
+                                ravenTrigger.State = InternalTriggerState.PausedAndBlocked;
+                            }
+                        }
+                        else if (GetBlockedJobs().Contains(new SimpleKey(operTrig.JobKey.Name, operTrig.JobKey.Group)))
+                        {
+                            ravenTrigger.State = InternalTriggerState.Blocked;
+                        }
+                        else
+                        {
+                            ravenTrigger.IsTimedTrigger = true;
+                        }
+
                         bulkInsert.Store(ravenTrigger, ravenTrigger.TriggerKey.Name + "/" + ravenTrigger.TriggerKey.Group); // Storing all triggers for a current job
                     }
                     
@@ -233,21 +250,32 @@ namespace Quartz.Impl.RavenDB
                 {
                     throw new ObjectAlreadyExistsException(newTrigger);
                 }
+                //RemoveTrigger(newTrigger.Key); - no real need to remove, store() overwrites anyways
             }
 
-            if (CheckExists(newTrigger.JobKey))
+            if (!CheckExists(newTrigger.JobKey))
             {
-                if (!replaceExisting)
+                throw new JobPersistenceException("The job (" + newTrigger.JobKey + ") referenced by the trigger does not exist.");
+            }
+
+            var trigger = new RavenTrigger(newTrigger);
+
+            if (GetPausedTriggerGroups().Contains(newTrigger.Key.Group) || GetPausedJobGroups().Contains(newTrigger.JobKey.Group))
+            {
+                trigger.State = InternalTriggerState.Paused;
+                if (GetBlockedJobs().Contains(new SimpleKey(newTrigger.JobKey.Name, newTrigger.JobKey.Group)))
                 {
-                    throw new JobPersistenceException("The job (" + newTrigger.JobKey + ") referenced by the trigger does not exist.");
+                    trigger.State = InternalTriggerState.PausedAndBlocked;
                 }
             }
-
-            var trigger = new RavenTrigger(newTrigger)
+            else if (GetBlockedJobs().Contains(new SimpleKey(newTrigger.JobKey.Name, newTrigger.JobKey.Group)))
             {
-                State = DetermineNewTriggerState(newTrigger),
-                IsTimedTrigger = true
-            };
+                trigger.State = InternalTriggerState.Blocked;
+            }
+            else
+            {
+                trigger.IsTimedTrigger = true;
+            }
 
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
@@ -255,30 +283,6 @@ namespace Quartz.Impl.RavenDB
                 session.Store(trigger, trigger.TriggerKey.Name + "/" + trigger.TriggerKey.Group);
                 session.SaveChanges();
             }
-        }
-
-        public InternalTriggerState DetermineNewTriggerState(IOperableTrigger newTrigger)
-        {
-            InternalTriggerState state;
-
-            if (GetPausedTriggerGroups().Contains(newTrigger.Key.Group) || GetPausedJobGroups().Contains(newTrigger.JobKey.Group))
-            {
-                state = InternalTriggerState.Paused;
-                if (GetBlockedJobs().Contains(new SimpleKey(newTrigger.JobKey.Name, newTrigger.JobKey.Group)))
-                {
-                    state = InternalTriggerState.PausedAndBlocked;
-                }
-            }
-            else if (GetBlockedJobs().Contains(new SimpleKey(newTrigger.JobKey.Name, newTrigger.JobKey.Group)))
-            {
-                state = InternalTriggerState.Blocked;
-            }
-            else
-            {
-                //default is waiting
-                state = InternalTriggerState.Waiting;
-            }
-            return state;
         }
 
         public bool RemoveTrigger(TriggerKey triggerKey)
@@ -567,11 +571,12 @@ namespace Quartz.Impl.RavenDB
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
+                var simpleJobKey = new SimpleKey(jobKey.Name, jobKey.Group);
                 return session
                     .Query<RavenTrigger>()
-                    .Where(t => Equals(t.JobKey, jobKey))
-                    .Select(t => t.Deserialize())
-                    .ToList();
+                    .Where(t => Equals(t.JobKey, simpleJobKey))
+                    .ToList()
+                    .Select(trigger => trigger.Deserialize()).ToList();
             }
         }
 
