@@ -249,6 +249,10 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Quartz.Impl.RavenDB\Quartz.Impl.RavenDB.csproj">
+      <Project>{34d9ad6c-a40e-4a78-bc8e-bbd04c21b556}</Project>
+      <Name>Quartz.Impl.RavenDB</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Quartz\Quartz.2010.csproj">
       <Project>{AEF8823B-E45B-4B35-A4D0-C08C1196D017}</Project>
       <Name>Quartz.2010</Name>

@@ -21,17 +21,25 @@ namespace Quartz.Impl.RavenDB
     public class JobStore : IJobStore
     {
         private readonly object lockObject = new object();
-        private TimeSpan misfireThreshold = TimeSpan.FromSeconds(5);
+        private TimeSpan misfireThreshold = TimeSpan.FromMinutes(1);
         private ISchedulerSignaler signaler;
         private static long ftrCtr = SystemTime.UtcNow().Ticks;
 
         public bool SupportsPersistence => true;
         public long EstimatedTimeToReleaseAndAcquireTrigger => 100;
-        public bool Clustered => true;
+        public bool Clustered => false;
 
         public string InstanceId { get; set; }
         public string InstanceName { get; set; }
         public int ThreadPoolSize { get; set; }
+
+        public JobStore()
+        {
+            InstanceName = "UnitTestScheduler";
+            InstanceId = "instance_two";
+        }
+
+
 
         public void Initialize(ITypeLoadHelper loadHelper, ISchedulerSignaler s)
         {
@@ -161,7 +169,7 @@ namespace Quartz.Impl.RavenDB
 
         public void StoreJobsAndTriggers(IDictionary<IJobDetail, Collection.ISet<ITrigger>> triggersAndJobs, bool replace)
         {
-            using (var bulkInsert = DocumentStoreHolder.Store.BulkInsert(options: new BulkInsertOptions() { OverwriteExisting = replace }))
+            using (var bulkInsert = DocumentStoreHolder.Store.BulkInsert(options: new BulkInsertOptions() /*{ OverwriteExisting = replace }*/))
             {
                 foreach (var pair in triggersAndJobs)
                 {
@@ -237,18 +245,9 @@ namespace Quartz.Impl.RavenDB
 
             var trigger = new RavenTrigger(newTrigger)
             {
-                State = DetermineNewTriggerState(newTrigger)
+                State = DetermineNewTriggerState(newTrigger),
+                IsTimedTrigger = true
             };
-            
-            // Check of triggerGroup is paused or blocked and update trigger if needed
-            if (GetPausedTriggerGroups().Contains(trigger.TriggerKey.Group))
-            {
-                trigger.State = InternalTriggerState.Paused;
-            }
-            if (GetBlockedJobs().Contains(new SimpleKey(trigger.JobKey.Name, trigger.JobKey.Group)))
-            {
-                trigger.State = InternalTriggerState.Blocked;
-            }
 
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
@@ -415,14 +414,21 @@ namespace Quartz.Impl.RavenDB
                     return;
                 }
 
-                using (var bulkInsert = DocumentStoreHolder.Store.BulkInsert(options: new BulkInsertOptions() { OverwriteExisting = true }))
+                using (var bulkInsert = DocumentStoreHolder.Store.BulkInsert(options: new BulkInsertOptions() /*{ OverwriteExisting = true }*/))
                 {
                     foreach (var t in triggersToUpdate)
                     {
                         var trigger = t.Deserialize();
+
                         trigger.UpdateWithNewCalendar(calendarCopy, misfireThreshold);
+                        var updatedTrigger = new RavenTrigger(trigger)
+                        {
+                            State = t.State,
+                            IsTimedTrigger = true
+
+                        };
                         //overwrite
-                        bulkInsert.Store(new RavenTrigger(trigger), trigger.Key.Name + "/" + trigger.Key.Group);
+                        bulkInsert.Store(updatedTrigger, trigger.Key.Name + "/" + trigger.Key.Group);
                     }
                     session.SaveChanges();
                 }
@@ -487,15 +493,32 @@ namespace Quartz.Impl.RavenDB
         {
             StringOperator op = matcher.CompareWithOperator;
             string compareToValue = matcher.CompareToValue;
+            Collection.ISet<JobKey> result = new Collection.HashSet<JobKey>();
 
-            using (var session = DocumentStoreHolder.Store.OpenSession())
+            if (op.Equals(StringOperator.Equality))
             {
-                return (Collection.ISet<JobKey>)session
-                    .Query<RavenJob>()
-                    .Where(j => op.Evaluate(j.Key.Group, compareToValue))
-                    .Select(j => j.Key)
-                    .ToHashSet();
+                HashSet<SimpleKey> queryResult;
+                using (var session = DocumentStoreHolder.Store.OpenSession())
+                {
+                    queryResult = session
+                        .Query<RavenJob>()
+                        .Where(j => j.Key.Group == compareToValue)
+                        //.Select(j => new JobKey(j.Key.Name, j.Key.Group))
+                        .Select(j => j.Key)
+                        .ToHashSet();
+                }
+                foreach (var simpleKey in queryResult)
+                {
+                    result.Add(new JobKey(simpleKey.Name, simpleKey.Group));
+                }
+                return result;
+                
             }
+            else
+            {
+                throw new NotImplementedException();
+            }
+
         }
 
         public Collection.ISet<TriggerKey> GetTriggerKeys(GroupMatcher<TriggerKey> matcher)
@@ -599,28 +622,35 @@ namespace Quartz.Impl.RavenDB
         {
             StringOperator op = matcher.CompareWithOperator;
             string compareToValue = matcher.CompareToValue;
-            Collection.ISet<string> pausedGroupsSet;
 
-            using (var session = DocumentStoreHolder.Store.OpenSession())
+            if (op.Equals(StringOperator.Equality))
             {
-                pausedGroupsSet = (Collection.ISet < string > )session
-                    .Query<RavenTrigger>()
-                    .Where(t => op.Evaluate(t.TriggerKey.Group, compareToValue))
-                    .Select(t => t.TriggerKey.Group)
-                    .ToHashSet();
-            }
-
-            foreach (string pausedGroup in pausedGroupsSet)
-            {
-                Collection.ISet<TriggerKey> keys = GetTriggerKeys(GroupMatcher<TriggerKey>.GroupEquals(pausedGroup));
-
-                foreach (TriggerKey key in keys)
+                Collection.ISet<string> pausedGroupsSet;
+                using (var session = DocumentStoreHolder.Store.OpenSession())
                 {
-                    PauseTrigger(key);
+                    pausedGroupsSet = (Collection.ISet<string>) session
+                        .Query<RavenTrigger>()
+                        .Where(t => t.TriggerKey.Group == compareToValue)
+                        .Select(t => t.TriggerKey.Group)
+                        .ToHashSet();
                 }
+
+                foreach (string pausedGroup in pausedGroupsSet)
+                {
+                    Collection.ISet<TriggerKey> keys = GetTriggerKeys(GroupMatcher<TriggerKey>.GroupEquals(pausedGroup));
+
+                    foreach (TriggerKey key in keys)
+                    {
+                        PauseTrigger(key);
+                    }
+                }
+
+                return pausedGroupsSet;
             }
-            // 
-            return pausedGroupsSet;
+            else
+            {
+                throw new NotImplementedException();
+            }
         }
 
         public void PauseJob(JobKey jobKey)
@@ -636,30 +666,37 @@ namespace Quartz.Impl.RavenDB
         {
             StringOperator op = matcher.CompareWithOperator;
             string compareToValue = matcher.CompareToValue;
-            IList<string> pausedGroupsSet;
-
-            using (var session = DocumentStoreHolder.Store.OpenSession())
+            if (op.Equals(StringOperator.Equality))
             {
-                pausedGroupsSet = session
-                    .Query<RavenJob>()
-                    .Where(j => op.Evaluate(j.Key.Group, compareToValue))
-                    .Select(j => j.Key.Group)
-                    .ToList();
-            }
+                IList<string> pausedGroupsSet;
 
-            foreach (string groupName in pausedGroupsSet)
-            {
-                foreach (JobKey jobKey in GetJobKeys(GroupMatcher<JobKey>.GroupEquals(groupName)))
+                using (var session = DocumentStoreHolder.Store.OpenSession())
                 {
-                    IList<IOperableTrigger> triggers = GetTriggersForJob(jobKey);
-                    foreach (IOperableTrigger trigger in triggers)
+                    pausedGroupsSet = session
+                        .Query<RavenJob>()
+                        .Where(j => j.Key.Group == compareToValue)
+                        .Select(j => j.Key.Group)
+                        .ToList();
+                }
+
+                foreach (string groupName in pausedGroupsSet)
+                {
+                    foreach (JobKey jobKey in GetJobKeys(GroupMatcher<JobKey>.GroupEquals(groupName)))
                     {
-                        PauseTrigger(trigger.Key);
+                        IList<IOperableTrigger> triggers = GetTriggersForJob(jobKey);
+                        foreach (IOperableTrigger trigger in triggers)
+                        {
+                            PauseTrigger(trigger.Key);
+                        }
                     }
                 }
-            }
 
-            return pausedGroupsSet;
+                return pausedGroupsSet;
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
         }
 
         public void ResumeTrigger(TriggerKey triggerKey)
@@ -978,7 +1015,7 @@ namespace Quartz.Impl.RavenDB
                 session.SaveChanges();
             }
 
-            using (var bulkInsert = DocumentStoreHolder.Store.BulkInsert(options: new BulkInsertOptions() { OverwriteExisting = true }))
+            using (var bulkInsert = DocumentStoreHolder.Store.BulkInsert(options: new BulkInsertOptions() /*{ OverwriteExisting = true }*/))
             { 
                 // If we did excluded triggers to prevent ACQUIRE State due to DisallowConcurrentExecution, we need to add them back to store.
                 if (excludedTriggers.Count > 0)

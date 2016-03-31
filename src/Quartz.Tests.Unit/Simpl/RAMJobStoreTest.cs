@@ -32,6 +32,8 @@ using Quartz.Job;
 using Quartz.Simpl;
 using Quartz.Spi;
 
+using Quartz.Impl.RavenDB;
+
 namespace Quartz.Tests.Unit.Simpl
 {
     /// <summary>
@@ -48,7 +50,9 @@ namespace Quartz.Tests.Unit.Simpl
         [SetUp]
         public void SetUp()
         {
-            fJobStore = new RAMJobStore();
+            
+            fJobStore = new JobStore();
+            fJobStore.ClearAllSchedulingData();
             fSignaler = new SampleSignaler();
             fJobStore.Initialize(null, fSignaler);
             fJobStore.SchedulerStarted();

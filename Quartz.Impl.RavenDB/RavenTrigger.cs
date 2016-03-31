@@ -68,12 +68,9 @@ namespace Quartz.Impl.RavenDB
         public RavenTrigger(IOperableTrigger newTrigger)
         {
             if (newTrigger == null) return;
+
             TriggerKey = new SimpleKey(newTrigger.Key.Name, newTrigger.Key.Group);
             JobKey = new SimpleKey(newTrigger.JobKey.Name, newTrigger.JobKey.Group);
-            IsTimedTrigger = true;
-            State = InternalTriggerState.Waiting;
-
-
             Description = newTrigger.Description;
             CalendarName = newTrigger.CalendarName;
             JobDataMap = newTrigger.JobDataMap;
@@ -84,6 +81,9 @@ namespace Quartz.Impl.RavenDB
             Priority = newTrigger.Priority;
             HasMillisecondPrecision = newTrigger.HasMillisecondPrecision;
 
+            IsTimedTrigger = true;
+            State = InternalTriggerState.Waiting;
+            
             // Init trigger specific properties according to type of newTrigger. 
             // If an option doesn't apply to the type of trigger it will stay null by default.
 
@@ -143,8 +143,6 @@ namespace Quartz.Impl.RavenDB
 
         public IOperableTrigger Deserialize()
         {
-            ITrigger trigger;
-
             var triggerBuilder = TriggerBuilder.Create()
                .WithIdentity(TriggerKey.Name, TriggerKey.Group)
                .WithDescription(Description)
@@ -162,7 +160,6 @@ namespace Quartz.Impl.RavenDB
                     builder
                         .InTimeZone(Cron.TimeZoneId);
                 });
-                trigger = triggerBuilder.Build();
             }
             else if (Simp != null)
             {
@@ -172,7 +169,6 @@ namespace Quartz.Impl.RavenDB
                         .WithInterval(Simp.RepeatInterval)
                         .WithRepeatCount(Simp.RepeatCount);
                 });
-                trigger = triggerBuilder.Build();
             }
             else if (Cal != null)
             {
@@ -184,7 +180,6 @@ namespace Quartz.Impl.RavenDB
                         .PreserveHourOfDayAcrossDaylightSavings(Cal.PreserveHourOfDayAcrossDaylightSavings)
                         .SkipDayIfHourDoesNotExist(Cal.SkipDayIfHourDoesNotExist);
                 });
-                trigger = triggerBuilder.Build();
             }
             else if (Day != null)
             {
@@ -200,7 +195,7 @@ namespace Quartz.Impl.RavenDB
                 });
             }
 
-            trigger = triggerBuilder.Build();
+            var trigger = triggerBuilder.Build();
             return (IOperableTrigger) trigger;
         }
 

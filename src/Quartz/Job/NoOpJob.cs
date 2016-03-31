@@ -27,6 +27,7 @@ namespace Quartz.Job
 	/// </summary>
 	/// <author>James House</author>
     /// <author>Marko Lahma (.NET)</author>
+    [PersistJobDataAfterExecution]
     public class NoOpJob : IJob
 	{
 		/// <summary>

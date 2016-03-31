@@ -1,10 +1,17 @@
 ﻿using System;
 using System.Collections.Specialized;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Threading;
 
 using Quartz;
+using Quartz.Collection;
 using Quartz.Impl;
 using Quartz.Impl.Calendar;
+using Quartz.Impl.RavenDB;
+using Quartz.Impl.Triggers;
+using Quartz.Simpl;
+using Quartz.Spi;
 
 namespace Tryouts
 {
@@ -18,54 +25,42 @@ namespace Tryouts
                 Level = Common.Logging.LogLevel.Info
             };
 
-            NameValueCollection properties = new NameValueCollection();
+            NameValueCollection properties = new NameValueCollection
+            {
+                ["quartz.scheduler.instanceName"] = "TestScheduler",
+                ["quartz.scheduler.instanceId"] = "instance_one",
+                ["quartz.threadPool.type"] = "Quartz.Simpl.SimpleThreadPool, Quartz",
+                ["quartz.threadPool.threadCount"] = "1",
+                ["quartz.threadPool.threadPriority"] = "Normal",
+                
+                ["quartz.jobStore.type"] = "Quartz.Impl.RavenDB.JobStore, Quartz.Impl.RavenDB",
+                ["quartz.dataSource.default.connectionString"] = "Url=http://localhost:8080;DefaultDatabase=IftahDB",
+                ["quartz.dataSource.default.provider"] = "SqlServer-20",
+                ["quartz.jobStore.misfireThreshold"] = "60000",
 
-            properties["quartz.scheduler.instanceName"] = "TestScheduler";
-            properties["quartz.scheduler.instanceId"] = "instance_one";
-            properties["quartz.threadPool.type"] = "Quartz.Simpl.SimpleThreadPool, Quartz";
-            properties["quartz.threadPool.threadCount"] = "1";
-            properties["quartz.threadPool.threadPriority"] = "Normal";
 
-            properties["quartz.jobStore.type"] = "Quartz.Impl.RavenDB.JobStore, Quartz.Impl.RavenDB";
-            properties["quartz.dataSource.default.connectionString"] = "Url=http://localhost:8080;DefaultDatabase=IftahDB";
-            properties["quartz.dataSource.default.provider"] = "SqlServer-20";
-            /*
-
-
-              properties["quartz.jobStore.misfireThreshold"] = "60000";
-              properties["quartz.jobStore.type"] = "Quartz.Impl.AdoJobStore.JobStoreTX, Quartz";
-              properties["quartz.jobStore.useProperties"] = "false";
-              properties["quartz.jobStore.dataSource"] = "default";
-              properties["quartz.jobStore.tablePrefix"] = "QRTZ_";
-              properties["quartz.jobStore.lockHandler.type"] = "Quartz.Impl.AdoJobStore.UpdateLockRowSemaphore, Quartz";
-              properties["quartz.jobStore.driverDelegateType"] = "Quartz.Impl.AdoJobStore.SqlServerDelegate, Quartz";
-
-              properties["quartz.dataSource.default.connectionString"] = "Server=DESKTOP-2AM9NOM\\SQLEXPRESS;Database=IftahDB;Trusted_Connection=True;";
-              properties["quartz.dataSource.default.provider"] = "SqlServer-20";
-     */
-
+                /*
+                ["quartz.jobStore.misfireThreshold"] = "60000",
+                ["quartz.jobStore.type"] = "Quartz.Impl.AdoJobStore.JobStoreTX, Quartz",
+                ["quartz.jobStore.useProperties"] = "false",
+                ["quartz.jobStore.dataSource"] = "default",
+                ["quartz.jobStore.tablePrefix"] = "QRTZ_",
+                ["quartz.jobStore.lockHandler.type"] = "Quartz.Impl.AdoJobStore.UpdateLockRowSemaphore, Quartz",
+                ["quartz.jobStore.driverDelegateType"] = "Quartz.Impl.AdoJobStore.SqlServerDelegate, Quartz",
+                ["quartz.dataSource.default.connectionString"] = "Server=DESKTOP-2AM9NOM\\SQLEXPRESS;Database=IftahDB;Trusted_Connection=True;",
+                ["quartz.dataSource.default.provider"] = "SqlServer-20"
+            */
+            };
+            
             try
             {
-                /*
-
-                 // create the thread pool 
-                 SimpleThreadPool threadPool = new SimpleThreadPool(5, ThreadPriority.Normal); 
-                 threadPool.Initialize(); 
-                 // create the job store 
-                 IJobStore jobStore = new JobStore(); 
-                 
-                 DirectSchedulerFactory.Instance.CreateScheduler("My Quartz Scheduler", "My Instance", threadPool, jobStore); 
-                 // don't forget to start the scheduler: 
-                 DirectSchedulerFactory.Instance.GetScheduler().Start();
-                 */
-
                 // First we must get a reference to a scheduler
                 ISchedulerFactory sf = new StdSchedulerFactory(properties);
                 IScheduler scheduler = sf.GetScheduler();
 
                 // and start it off
                 scheduler.Start();
-
+                
                 // define the job and tie it to our ExampleJob class
                 IJobDetail job1 = JobBuilder.Create<ExampleJob>()
                     .WithIdentity("job1", "group1")
@@ -129,7 +124,7 @@ namespace Tryouts
 
                 scheduler.ScheduleJob(job1, triggerSet, true);
                 scheduler.ScheduleJob(job2, trigger4);
-
+                
                 // some sleep to show what's happening
                 Thread.Sleep(TimeSpan.FromSeconds(60));
 
