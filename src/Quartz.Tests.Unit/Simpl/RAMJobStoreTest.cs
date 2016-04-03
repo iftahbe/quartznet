@@ -41,7 +41,7 @@ namespace Quartz.Tests.Unit.Simpl
     /// as part of issue QUARTZ-306.
     /// </summary>
     [TestFixture]
-    public class RAMJobStoreTest
+    public class JobStoreTest
     {
         private IJobStore fJobStore;
         private JobDetailImpl fJobDetail;
