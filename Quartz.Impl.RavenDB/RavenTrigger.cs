@@ -1,6 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
 
-using Quartz.Collection;
 using Quartz.Impl.Triggers;
 using Quartz.Simpl;
 using Quartz.Spi;
@@ -61,7 +61,7 @@ namespace Quartz.Impl.RavenDB
             public int RepeatInterval { get; set; }        
             public TimeOfDay StartTimeOfDay { get; set; }
             public TimeOfDay EndTimeOfDay { get; set; }
-            public ISet<DayOfWeek> DaysOfWeek { get; set; }
+            public Collection.ISet<DayOfWeek> DaysOfWeek { get; set; }
             public int TimesTriggered { get; set; }
             public TimeZoneInfo TimeZone { get; set; }
 
@@ -208,5 +208,84 @@ namespace Quartz.Impl.RavenDB
             return (IOperableTrigger)trigger;
         }
 
+    }
+
+    internal class RavenTriggerComparator : IComparer<RavenTrigger>, IEquatable<RavenTriggerComparator>
+    {
+        private readonly FireTimeComparator ftc = new FireTimeComparator();
+
+        public int Compare(RavenTrigger trig1, RavenTrigger trig2)
+        {
+            return ftc.Compare(trig1, trig2);
+        }
+
+        public override bool Equals(object obj)
+        {
+            return (obj is RavenTriggerComparator);
+        }
+
+        /// <summary>
+        /// Indicates whether the current object is equal to another object of the same type.
+        /// </summary>
+        /// <returns>
+        /// true if the current object is equal to the <paramref name="other"/> parameter; otherwise, false.
+        /// </returns>
+        /// <param name="other">An object to compare with this object.</param>
+        public bool Equals(RavenTriggerComparator other)
+        {
+            return true;
+        }
+
+        /// <summary>
+        /// Serves as a hash function for a particular type. 
+        /// </summary>
+        /// <returns>
+        /// A hash code for the current <see cref="T:System.Object"/>.
+        /// </returns>
+        /// <filterpriority>2</filterpriority>
+        public override int GetHashCode()
+        {
+            return (ftc != null ? ftc.GetHashCode() : 0);
+        }
+    }
+
+    public class FireTimeComparator : IComparer<RavenTrigger>
+    {
+        public int Compare(RavenTrigger trig1, RavenTrigger trig2)
+        {
+            DateTimeOffset? t1 = trig1.NextFireTimeUtc;
+            DateTimeOffset? t2 = trig2.NextFireTimeUtc;
+
+            if (t1 != null || t2 != null)
+            {
+                if (t1 == null)
+                {
+                    return 1;
+                }
+
+                if (t2 == null)
+                {
+                    return -1;
+                }
+
+                if (t1 < t2)
+                {
+                    return -1;
+                }
+
+                if (t1 > t2)
+                {
+                    return 1;
+                }
+            }
+
+            int comp = trig2.Priority - trig1.Priority;
+            if (comp != 0)
+            {
+                return comp;
+            }
+
+            return 0;
+        }
     }
 }

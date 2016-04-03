@@ -41,7 +41,7 @@ namespace Quartz.Tests.Unit.Simpl
     /// as part of issue QUARTZ-306.
     /// </summary>
     [TestFixture]
-    public class RAMJobStoreTest
+    public class JobStoreTest
     {
         private IJobStore fJobStore;
         private JobDetailImpl fJobDetail;
@@ -273,7 +273,7 @@ namespace Quartz.Tests.Unit.Simpl
         [Test]
         public void TestRetrieveJob_NoJobFound()
         {
-            RAMJobStore store = new RAMJobStore();
+            var store = new JobStore();
             IJobDetail job = store.RetrieveJob(new JobKey("not", "existing"));
             Assert.IsNull(job);
         }
@@ -281,7 +281,7 @@ namespace Quartz.Tests.Unit.Simpl
         [Test]
         public void TestRetrieveTrigger_NoTriggerFound()
         {
-            RAMJobStore store = new RAMJobStore();
+            var store = new JobStore();
             IOperableTrigger trigger = store.RetrieveTrigger(new TriggerKey("not", "existing"));
             Assert.IsNull(trigger);
         }
@@ -289,7 +289,7 @@ namespace Quartz.Tests.Unit.Simpl
         [Test]
         public void testStoreAndRetrieveJobs()
         {
-            RAMJobStore store = new RAMJobStore();
+            var store = new JobStore();
 
             // Store jobs.
             for (int i = 0; i < 10; i++)
@@ -309,7 +309,7 @@ namespace Quartz.Tests.Unit.Simpl
         [Test]
         public void TestStoreAndRetrieveTriggers()
         {
-            RAMJobStore store = new RAMJobStore();
+            var store = new JobStore();
 
             // Store jobs and triggers.
             for (int i = 0; i < 10; i++)
@@ -340,7 +340,7 @@ namespace Quartz.Tests.Unit.Simpl
             ITypeLoadHelper loadHelper = new SimpleTypeLoadHelper();
             loadHelper.Initialize();
 
-            RAMJobStore store = new RAMJobStore();
+            var store = new JobStore();
             store.Initialize(loadHelper, schedSignaler);
 
             // Setup: Store jobs and triggers.
@@ -382,7 +382,7 @@ namespace Quartz.Tests.Unit.Simpl
             ITypeLoadHelper loadHelper = new SimpleTypeLoadHelper();
             loadHelper.Initialize();
 
-            RAMJobStore store = new RAMJobStore();
+            var store = new JobStore();
             store.Initialize(loadHelper, schedSignaler);
 
             // Setup: Store jobs and triggers.
