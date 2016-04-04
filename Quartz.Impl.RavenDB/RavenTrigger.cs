@@ -11,12 +11,13 @@ namespace Quartz.Impl.RavenDB
     {
         public SimpleKey TriggerKey { get; set; }
         public SimpleKey JobKey { get; set; }
-        public bool IsTimedTrigger { get; set; }
+        //public bool IsTimedTrigger { get; set; }
         public InternalTriggerState State { get; set; }
 
         public string Description { get; set; }
         public string CalendarName { get; set; }
         public JobDataMap JobDataMap { get; set; }
+        public string FireInstanceId { get; set; }
         public DateTimeOffset? FinalFireTimeUtc { get; set; }
         public int MisfireInstruction { get; set; }
         public DateTimeOffset? EndTimeUtc { get; set; }
@@ -80,13 +81,13 @@ namespace Quartz.Impl.RavenDB
             MisfireInstruction = newTrigger.MisfireInstruction;
             Priority = newTrigger.Priority;
             HasMillisecondPrecision = newTrigger.HasMillisecondPrecision;
-
+            FireInstanceId = newTrigger.FireInstanceId;
             EndTimeUtc = newTrigger.EndTimeUtc;
             StartTimeUtc = newTrigger.StartTimeUtc;
             NextFireTimeUtc = newTrigger.GetNextFireTimeUtc();
             PreviousFireTimeUtc = newTrigger.GetPreviousFireTimeUtc();
 
-            IsTimedTrigger = false;
+            //IsTimedTrigger = false;
             State = InternalTriggerState.Waiting;
             
             // Init trigger specific properties according to type of newTrigger. 
@@ -157,6 +158,7 @@ namespace Quartz.Impl.RavenDB
                .EndAt(EndTimeUtc)
                .ForJob(new JobKey(JobKey.Name, JobKey.Group))
                .UsingJobData(JobDataMap);
+            
 
             if (Cron != null)
             {
@@ -202,10 +204,13 @@ namespace Quartz.Impl.RavenDB
 
             var trigger = triggerBuilder.Build();
 
-            ((IOperableTrigger)trigger).SetNextFireTimeUtc(NextFireTimeUtc);
-            ((IOperableTrigger)trigger).SetPreviousFireTimeUtc(PreviousFireTimeUtc);
+            // Iftah - should I allocate a new var or cast 4 times?
+            var returnTrigger = (IOperableTrigger)trigger;
+            returnTrigger.SetNextFireTimeUtc(NextFireTimeUtc);
+            returnTrigger.SetPreviousFireTimeUtc(PreviousFireTimeUtc);
+            returnTrigger.FireInstanceId = FireInstanceId;
 
-            return (IOperableTrigger)trigger;
+            return returnTrigger;
         }
 
     }
