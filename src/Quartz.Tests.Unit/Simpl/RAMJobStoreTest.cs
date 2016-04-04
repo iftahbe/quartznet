@@ -216,8 +216,8 @@ namespace Quartz.Tests.Unit.Simpl
         [Test]
         public void TestStoreTriggerReplacesTrigger()
         {
-            string jobName = "StoreTriggerReplacesTrigger";
-            string jobGroup = "StoreTriggerReplacesTriggerGroup";
+            string jobName = "StoreJobReplacesJob";
+            string jobGroup = "StoreJobReplacesJobGroup";
             JobDetailImpl detail = new JobDetailImpl(jobName, jobGroup, typeof (NoOpJob));
             fJobStore.StoreJob(detail, false);
 
@@ -317,7 +317,7 @@ namespace Quartz.Tests.Unit.Simpl
                 IJobDetail job = JobBuilder.Create<NoOpJob>().WithIdentity("job" + i).Build();
                 store.StoreJob(job, true);
                 SimpleScheduleBuilder schedule = SimpleScheduleBuilder.Create();
-                ITrigger trigger = TriggerBuilder.Create().WithIdentity("job" + i).WithSchedule(schedule).ForJob(job).Build();
+                ITrigger trigger = TriggerBuilder.Create().WithIdentity("trigger" + i).WithSchedule(schedule).ForJob(job).Build();
                 store.StoreTrigger((IOperableTrigger) trigger, true);
             }
             // Retrieve job and trigger.
@@ -327,7 +327,7 @@ namespace Quartz.Tests.Unit.Simpl
                 IJobDetail storedJob = store.RetrieveJob(jobKey);
                 Assert.AreEqual(jobKey, storedJob.Key);
 
-                TriggerKey triggerKey = new TriggerKey("job" + i);
+                TriggerKey triggerKey = new TriggerKey("trigger" + i);
                 ITrigger storedTrigger = store.RetrieveTrigger(triggerKey);
                 Assert.AreEqual(triggerKey, storedTrigger.Key);
             }
@@ -350,7 +350,7 @@ namespace Quartz.Tests.Unit.Simpl
                 DateTime startTime = startTime0.AddMinutes(i*1); // a min apart
                 IJobDetail job = JobBuilder.Create<NoOpJob>().WithIdentity("job" + i).Build();
                 SimpleScheduleBuilder schedule = SimpleScheduleBuilder.RepeatMinutelyForever(2);
-                IOperableTrigger trigger = (IOperableTrigger) TriggerBuilder.Create().WithIdentity("job" + i).WithSchedule(schedule).ForJob(job).StartAt(startTime).Build();
+                IOperableTrigger trigger = (IOperableTrigger) TriggerBuilder.Create().WithIdentity("trigger" + i).WithSchedule(schedule).ForJob(job).StartAt(startTime).Build();
 
                 // Manually trigger the first fire time computation that scheduler would do. Otherwise 
                 // the store.acquireNextTriggers() will not work properly.
@@ -368,7 +368,7 @@ namespace Quartz.Tests.Unit.Simpl
                 TimeSpan timeWindow = TimeSpan.Zero;
                 IList<IOperableTrigger> triggers = store.AcquireNextTriggers(noLaterThan, maxCount, timeWindow);
                 Assert.AreEqual(1, triggers.Count);
-                Assert.AreEqual("job" + i, triggers[0].Key.Name);
+                Assert.AreEqual("trigger" + i, triggers[0].Key.Name);
 
                 // Let's remove the trigger now.
                 store.RemoveJob(triggers[0].JobKey);
@@ -392,7 +392,7 @@ namespace Quartz.Tests.Unit.Simpl
                 DateTimeOffset startTime = startTime0.AddMinutes(i); // a min apart
                 IJobDetail job = JobBuilder.Create<NoOpJob>().WithIdentity("job" + i).Build();
                 SimpleScheduleBuilder schedule = SimpleScheduleBuilder.RepeatMinutelyForever(2);
-                IOperableTrigger trigger = (IOperableTrigger) TriggerBuilder.Create().WithIdentity("job" + i).WithSchedule(schedule).ForJob(job).StartAt(startTime).Build();
+                IOperableTrigger trigger = (IOperableTrigger) TriggerBuilder.Create().WithIdentity("trigger" + i).WithSchedule(schedule).ForJob(job).StartAt(startTime).Build();
 
                 // Manually trigger the first fire time computation that scheduler would do. Otherwise 
                 // the store.acquireNextTriggers() will not work properly.
@@ -410,7 +410,7 @@ namespace Quartz.Tests.Unit.Simpl
             Assert.AreEqual(7, triggers.Count);
             for (int i = 0; i < 7; i++)
             {
-                Assert.AreEqual("job" + i, triggers[i].Key.Name);
+                Assert.AreEqual("trigger" + i, triggers[i].Key.Name);
             }
         }
 
