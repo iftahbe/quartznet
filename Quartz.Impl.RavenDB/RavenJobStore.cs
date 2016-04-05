@@ -201,12 +201,12 @@ namespace Quartz.Impl.RavenDB
             {
                 foreach (var pair in triggersAndJobs)
                 {
-                    bulkInsert.Store(new Job(pair.Key), pair.Key.Key.Name + "/" + pair.Key.Key.Group); // Store job first
+                    bulkInsert.Store(new Job(pair.Key), pair.Key.Key.Name + "/" + pair.Key.Key.Group);
+                    // Storing all triggers for the current job
                     foreach (var trig in pair.Value)
                     {
                         var operTrig = trig as IOperableTrigger;
-                        if (operTrig == null) throw new InvalidCastException();
-
+                        if (operTrig == null) continue;
                         var trigger = new Trigger(operTrig);
 
                         if (GetPausedTriggerGroups().Contains(operTrig.Key.Group) || GetPausedJobGroups().Contains(operTrig.JobKey.Group))
@@ -226,7 +226,7 @@ namespace Quartz.Impl.RavenDB
                             timeTriggers.Add(trigger);
                         }
 
-                        bulkInsert.Store(trigger, trigger.TriggerKey.Name + "/" + trigger.TriggerKey.Group); // Storing all triggers for a current job
+                        bulkInsert.Store(trigger, trigger.TriggerKey.Name + "/" + trigger.TriggerKey.Group); 
                     }
                     
                 }
@@ -1256,26 +1256,18 @@ namespace Quartz.Impl.RavenDB
                 
                 if (job != null)
                 {
-                    IJobDetail jd = job.Deserialize();
-
                     if (jobDetail.PersistJobDataAfterExecution)
                     {
-                        JobDataMap newData = jobDetail.JobDataMap;
-                        if (newData != null)
-                        {
-                            newData = (JobDataMap) newData.Clone();
-                            newData.ClearDirtyFlag();
-                        }
-                        jd = jd.GetJobBuilder().SetJobData(newData).Build();
-                        job = new Job(jd);
+                        job.JobDataMap = jobDetail.JobDataMap;
+                       
                         session.Store(job);
                     }
-                    if (jd.ConcurrentExecutionDisallowed)
+                    if (job.ConcurrentExecutionDisallowed)
                     {
-                        sched.BlockedJobs.Remove(new SimpleKey(jd.Key.Name, jd.Key.Group));
+                        sched.BlockedJobs.Remove(job.Key);
 
                         List<Trigger> trigs = session.Query<Trigger>()
-                            .Where(t => Equals(t.JobKey.Group, jd.Key.Group) && Equals(t.JobKey.Name, jd.Key.Name))
+                            .Where(t => Equals(t.JobKey.Group, job.Key.Group) && Equals(t.JobKey.Name, job.Key.Name))
                             .ToList();
 
                         foreach (Trigger t in trigs)
@@ -1284,12 +1276,13 @@ namespace Quartz.Impl.RavenDB
                             {
                                 t.State = InternalTriggerState.Waiting;
                                 timeTriggers.Add(t);
+                                session.Store(t);
                             }
                             if (t.State == InternalTriggerState.PausedAndBlocked)
                             {
                                 t.State = InternalTriggerState.Paused;
+                                session.Store(t);
                             }
-                            session.Store(t);
                         }
 
                         signaler.SignalSchedulingChange(null);
