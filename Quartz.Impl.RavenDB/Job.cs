@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Quartz.Impl.RavenDB
 {
-    internal class RavenJob
+    internal class Job
     {
         public SimpleKey Key { get; set; }
         public string Description { get; set; }
@@ -18,7 +18,7 @@ namespace Quartz.Impl.RavenDB
         public bool RequestsRecovery { get; set; }
         public IDictionary<string, object> JobDataMap { get; set; }
 
-        public RavenJob(IJobDetail newJob)
+        public Job(IJobDetail newJob)
         {
             if (newJob == null) return;
             Key = new SimpleKey(newJob.Key.Name, newJob.Key.Group);

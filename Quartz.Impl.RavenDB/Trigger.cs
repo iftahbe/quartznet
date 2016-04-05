@@ -7,11 +7,10 @@ using Quartz.Spi;
 
 namespace Quartz.Impl.RavenDB
 {
-    public class RavenTrigger
+    public class Trigger
     {
         public SimpleKey TriggerKey { get; set; }
         public SimpleKey JobKey { get; set; }
-        //public bool IsTimedTrigger { get; set; }
         public InternalTriggerState State { get; set; }
 
         public string Description { get; set; }
@@ -68,7 +67,7 @@ namespace Quartz.Impl.RavenDB
 
         }
 
-        public RavenTrigger(IOperableTrigger newTrigger)
+        public Trigger(IOperableTrigger newTrigger)
         {
             if (newTrigger == null) return;
 
@@ -87,7 +86,6 @@ namespace Quartz.Impl.RavenDB
             NextFireTimeUtc = newTrigger.GetNextFireTimeUtc();
             PreviousFireTimeUtc = newTrigger.GetPreviousFireTimeUtc();
 
-            //IsTimedTrigger = false;
             State = InternalTriggerState.Waiting;
             
             // Init trigger specific properties according to type of newTrigger. 
@@ -204,7 +202,7 @@ namespace Quartz.Impl.RavenDB
 
             var trigger = triggerBuilder.Build();
 
-            // Iftah - should I allocate a new var or cast 4 times?
+            // Iftah - should I allocate a new variable or cast 4 times?
             var returnTrigger = (IOperableTrigger)trigger;
             returnTrigger.SetNextFireTimeUtc(NextFireTimeUtc);
             returnTrigger.SetPreviousFireTimeUtc(PreviousFireTimeUtc);
@@ -213,20 +211,28 @@ namespace Quartz.Impl.RavenDB
             return returnTrigger;
         }
 
+        public void UpdateFireTimes(ITrigger trig)
+        {
+            NextFireTimeUtc = trig.GetNextFireTimeUtc();
+            PreviousFireTimeUtc = trig.GetPreviousFireTimeUtc();
+        }
+
     }
 
-    internal class RavenTriggerComparator : IComparer<RavenTrigger>, IEquatable<RavenTriggerComparator>
+    
+
+    internal class TriggerComparator : IComparer<Trigger>, IEquatable<TriggerComparator>
     {
         private readonly FireTimeComparator ftc = new FireTimeComparator();
 
-        public int Compare(RavenTrigger trig1, RavenTrigger trig2)
+        public int Compare(Trigger trig1, Trigger trig2)
         {
             return ftc.Compare(trig1, trig2);
         }
 
         public override bool Equals(object obj)
         {
-            return (obj is RavenTriggerComparator);
+            return (obj is TriggerComparator);
         }
 
         /// <summary>
@@ -236,7 +242,7 @@ namespace Quartz.Impl.RavenDB
         /// true if the current object is equal to the <paramref name="other"/> parameter; otherwise, false.
         /// </returns>
         /// <param name="other">An object to compare with this object.</param>
-        public bool Equals(RavenTriggerComparator other)
+        public bool Equals(TriggerComparator other)
         {
             return true;
         }
@@ -254,9 +260,9 @@ namespace Quartz.Impl.RavenDB
         }
     }
 
-    public class FireTimeComparator : IComparer<RavenTrigger>
+    public class FireTimeComparator : IComparer<Trigger>
     {
-        public int Compare(RavenTrigger trig1, RavenTrigger trig2)
+        public int Compare(Trigger trig1, Trigger trig2)
         {
             DateTimeOffset? t1 = trig1.NextFireTimeUtc;
             DateTimeOffset? t2 = trig2.NextFireTimeUtc;

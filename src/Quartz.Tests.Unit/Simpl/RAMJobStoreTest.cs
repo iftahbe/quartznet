@@ -51,7 +51,7 @@ namespace Quartz.Tests.Unit.Simpl
         public void SetUp()
         {
             
-            fJobStore = new JobStore();
+            fJobStore = new RavenJobStore();
             fJobStore.ClearAllSchedulingData();
             fSignaler = new SampleSignaler();
             fJobStore.Initialize(null, fSignaler);
@@ -59,7 +59,7 @@ namespace Quartz.Tests.Unit.Simpl
 
             fJobDetail = new JobDetailImpl("job1", "jobGroup1", typeof (NoOpJob));
             fJobDetail.Durable = true;
-            fJobStore.StoreJob(fJobDetail, false);
+            fJobStore.StoreJob(fJobDetail, true);
         }
 
         [Test]
@@ -273,7 +273,7 @@ namespace Quartz.Tests.Unit.Simpl
         [Test]
         public void TestRetrieveJob_NoJobFound()
         {
-            var store = new JobStore();
+            var store = new RavenJobStore();
             IJobDetail job = store.RetrieveJob(new JobKey("not", "existing"));
             Assert.IsNull(job);
         }
@@ -281,7 +281,7 @@ namespace Quartz.Tests.Unit.Simpl
         [Test]
         public void TestRetrieveTrigger_NoTriggerFound()
         {
-            var store = new JobStore();
+            var store = new RavenJobStore();
             IOperableTrigger trigger = store.RetrieveTrigger(new TriggerKey("not", "existing"));
             Assert.IsNull(trigger);
         }
@@ -289,7 +289,7 @@ namespace Quartz.Tests.Unit.Simpl
         [Test]
         public void testStoreAndRetrieveJobs()
         {
-            var store = new JobStore();
+            var store = new RavenJobStore();
 
             // Store jobs.
             for (int i = 0; i < 10; i++)
@@ -309,7 +309,7 @@ namespace Quartz.Tests.Unit.Simpl
         [Test]
         public void TestStoreAndRetrieveTriggers()
         {
-            var store = new JobStore();
+            var store = new RavenJobStore();
 
             // Store jobs and triggers.
             for (int i = 0; i < 10; i++)
@@ -340,7 +340,7 @@ namespace Quartz.Tests.Unit.Simpl
             ITypeLoadHelper loadHelper = new SimpleTypeLoadHelper();
             loadHelper.Initialize();
 
-            var store = new JobStore();
+            var store = new RavenJobStore();
             store.Initialize(loadHelper, schedSignaler);
 
             // Setup: Store jobs and triggers.
@@ -382,7 +382,7 @@ namespace Quartz.Tests.Unit.Simpl
             ITypeLoadHelper loadHelper = new SimpleTypeLoadHelper();
             loadHelper.Initialize();
 
-            var store = new JobStore();
+            var store = new RavenJobStore();
             store.Initialize(loadHelper, schedSignaler);
 
             // Setup: Store jobs and triggers.

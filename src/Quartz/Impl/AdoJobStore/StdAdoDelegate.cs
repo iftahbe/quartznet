@@ -2883,6 +2883,7 @@ namespace Quartz.Impl.AdoJobStore
 
         public virtual IDbCommand PrepareCommand(ConnectionAndTransactionHolder cth, string commandText)
         {
+            Console.WriteLine(commandText);
             return adoUtil.PrepareCommand(cth, commandText);
         }
 

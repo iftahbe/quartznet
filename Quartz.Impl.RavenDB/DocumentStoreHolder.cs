@@ -17,8 +17,8 @@ namespace Quartz.Impl.RavenDB
         {
             var documentStore = new DocumentStore()
             {
-                Url = "http://localhost:8080",
-                DefaultDatabase = "IftahDB"
+                Url = RavenJobStore.Url,
+                DefaultDatabase = RavenJobStore.DefaultDatabase
             }.Initialize();
 
             return documentStore;

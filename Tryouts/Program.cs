@@ -32,15 +32,14 @@ namespace Tryouts
                 ["quartz.threadPool.type"] = "Quartz.Simpl.SimpleThreadPool, Quartz",
                 ["quartz.threadPool.threadCount"] = "1",
                 ["quartz.threadPool.threadPriority"] = "Normal",
+
+                ["quartz.jobStore.type"] = "Quartz.Impl.RavenDB.RavenJobStore, Quartz.Impl.RavenDB",
+                ["quartz.jobStore.misfireThreshold"] = "60000"
+               
+                //["quartz.ravendb.connectionString"] = "Url=http://localhost:8080;DefaultDatabase=IftahDB",
+               
                 
-                ["quartz.jobStore.type"] = "Quartz.Impl.RavenDB.JobStore, Quartz.Impl.RavenDB",
-                ["quartz.dataSource.default.connectionString"] = "Url=http://localhost:8080;DefaultDatabase=IftahDB",
-                ["quartz.dataSource.default.provider"] = "SqlServer-20",
-                ["quartz.jobStore.misfireThreshold"] = "60000",
-
-
-                /*
-                ["quartz.jobStore.misfireThreshold"] = "60000",
+              /*  ["quartz.jobStore.misfireThreshold"] = "60000",
                 ["quartz.jobStore.type"] = "Quartz.Impl.AdoJobStore.JobStoreTX, Quartz",
                 ["quartz.jobStore.useProperties"] = "false",
                 ["quartz.jobStore.dataSource"] = "default",
@@ -48,8 +47,8 @@ namespace Tryouts
                 ["quartz.jobStore.lockHandler.type"] = "Quartz.Impl.AdoJobStore.UpdateLockRowSemaphore, Quartz",
                 ["quartz.jobStore.driverDelegateType"] = "Quartz.Impl.AdoJobStore.SqlServerDelegate, Quartz",
                 ["quartz.dataSource.default.connectionString"] = "Server=DESKTOP-2AM9NOM\\SQLEXPRESS;Database=IftahDB;Trusted_Connection=True;",
-                ["quartz.dataSource.default.provider"] = "SqlServer-20"
-            */
+                ["quartz.dataSource.default.provider"] = "SqlServer-20"*/
+                
             };
             
             try
@@ -147,7 +146,7 @@ namespace Tryouts
     {
         public void Execute(IJobExecutionContext context)
         {
-            int count = (int?)context.MergedJobDataMap["Count"] ?? 1;
+            var count = (int?)context.MergedJobDataMap["Count"] ?? 1;
 
             Console.WriteLine("Greetings from ExampleJob1! Count:" + count);
 

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Quartz.Impl.RavenDB
 {
-    public class RavenScheduler
+    public class Scheduler
     {
         public string InstanceName { get; set; }
         public DateTimeOffset LastCheckinTime { get; set; }
