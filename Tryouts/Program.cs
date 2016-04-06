@@ -125,7 +125,7 @@ namespace Tryouts
                 scheduler.ScheduleJob(job2, trigger4);
                 
                 // some sleep to show what's happening
-                Thread.Sleep(TimeSpan.FromSeconds(60));
+                Thread.Sleep(TimeSpan.FromSeconds(600));
 
                 // and last shut down the scheduler when you are ready to close your program
                 scheduler.Shutdown();
@@ -146,7 +146,16 @@ namespace Tryouts
     {
         public void Execute(IJobExecutionContext context)
         {
-            var count = (int?)context.MergedJobDataMap["Count"] ?? 1;
+            int count;
+            if (context.MergedJobDataMap["Count"] == null)
+            {
+                count = 1;
+            }
+            else
+            {
+                count = context.MergedJobDataMap.GetIntValue("Count");
+            }
+            //var count = (int?)context.MergedJobDataMap["Count"] ?? 1;
 
             Console.WriteLine("Greetings from ExampleJob1! Count:" + count);
 

@@ -11,7 +11,7 @@ namespace Quartz.Impl.RavenDB
     {
         public SimpleKey Key { get; set; }
         public string Description { get; set; }
-        //public Type JobType { get; set; }
+        public Type JobType { get; set; }
         public bool Durable { get; set; }
         public bool ConcurrentExecutionDisallowed { get; set; }
         public bool PersistJobDataAfterExecution { get; set; }
@@ -23,7 +23,7 @@ namespace Quartz.Impl.RavenDB
             if (newJob == null) return;
             Key = new SimpleKey(newJob.Key.Name, newJob.Key.Group);
             Description = newJob.Description;
-            //JobType = newJob.JobType;
+            JobType = newJob.JobType;
             Durable = newJob.Durable;
             ConcurrentExecutionDisallowed = newJob.ConcurrentExecutionDisallowed;
             PersistJobDataAfterExecution = newJob.PersistJobDataAfterExecution;
@@ -36,7 +36,7 @@ namespace Quartz.Impl.RavenDB
             return JobBuilder.Create()
                     .WithIdentity(Key.Name, Key.Group)
                     .WithDescription(Description)
-                    //.OfType(JobType)
+                    .OfType(JobType)
                     .RequestRecovery(RequestsRecovery)
                     .SetJobData(new JobDataMap(JobDataMap))
                     .StoreDurably(Durable)

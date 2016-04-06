@@ -154,7 +154,7 @@ namespace Quartz.Impl.RavenDB
                .WithPriority(Priority)
                .StartAt(StartTimeUtc)
                .EndAt(EndTimeUtc)
-               .ForJob(new JobKey(JobKey.Name, JobKey.Group))
+               .ForJob(new JobKey(JobKey.Name,JobKey.Group))
                .UsingJobData(JobDataMap);
             
 
@@ -216,7 +216,6 @@ namespace Quartz.Impl.RavenDB
             NextFireTimeUtc = trig.GetNextFireTimeUtc();
             PreviousFireTimeUtc = trig.GetPreviousFireTimeUtc();
         }
-
     }
 
     
