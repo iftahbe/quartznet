@@ -46,15 +46,31 @@ namespace Quartz.Impl.RavenDB
             var stringBuilder = new DbConnectionStringBuilder();
 
             if (ConfigurationManager.ConnectionStrings["quartznet-ravendb"] != null)
+            {
                 stringBuilder.ConnectionString = ConfigurationManager.ConnectionStrings["quartznet-ravendb"].ConnectionString;
+            }
             else
+            {
                 stringBuilder.ConnectionString = defaultConnectionString;
+            }
 
             Url = stringBuilder["Url"] as string;
             DefaultDatabase = stringBuilder["DefaultDatabase"] as string;
 
             InstanceName = "UnitTestScheduler";
             InstanceId = "instance_two";
+
+            try
+            {
+                new TriggerIndex().Execute(DocumentStoreHolder.Store);
+                new JobIndex().Execute(DocumentStoreHolder.Store);
+
+            }
+            catch
+            {
+                // Already exists, do nothing
+            }
+            
 
             // This must be replaced with RecoverJobs() for persistance...
             // let's clean up just to make the scheduler work first
@@ -87,17 +103,18 @@ namespace Quartz.Impl.RavenDB
             {
                 var sched = session.Load<Scheduler>(InstanceName);
                 sched.State = state;
-                //session.Store(sched);
                 session.SaveChanges();
             }
         }
 
         public void SchedulerStarted()
         {
-
             try
             {
-                //Iftah RecoverJobs();
+                //Iftah RecoverJobs(); if nothing to recover we need to store a new scheduler
+                StoreScheduler(true);
+                //session.Store(sched);
+
             }
             catch (SchedulerException se)
             {
@@ -208,7 +225,6 @@ namespace Quartz.Impl.RavenDB
                 session.Store(schedToStore, InstanceName);
                 session.SaveChanges();
             }
-
         }
 
         public void StoreJobsAndTriggers(IDictionary<IJobDetail, Collection.ISet<ITrigger>> triggersAndJobs, bool replace)
@@ -222,7 +238,10 @@ namespace Quartz.Impl.RavenDB
                     foreach (var trig in pair.Value)
                     {
                         var operTrig = trig as IOperableTrigger;
-                        if (operTrig == null) continue;
+                        if (operTrig == null)
+                        {
+                            continue;
+                        }
                         var trigger = new Trigger(operTrig);
 
                         if (GetPausedTriggerGroups().Contains(operTrig.Key.Group) || GetPausedJobGroups().Contains(operTrig.JobKey.Group))
@@ -244,7 +263,6 @@ namespace Quartz.Impl.RavenDB
 
                         bulkInsert.Store(trigger, trigger.TriggerKey.Name + "/" + trigger.TriggerKey.Group);
                     }
-
                 }
                 // bulkInsert is disposed - same effect as session.SaveChanges()
             }
@@ -254,7 +272,10 @@ namespace Quartz.Impl.RavenDB
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                if (CheckExists(jobKey)) return false;
+                if (CheckExists(jobKey))
+                {
+                    return false;
+                }
 
                 session.Advanced.Defer(new DeleteCommandData
                 {
@@ -330,7 +351,10 @@ namespace Quartz.Impl.RavenDB
 
         public bool RemoveTrigger(TriggerKey triggerKey)
         {
-            if (!CheckExists(triggerKey)) return false;
+            if (!CheckExists(triggerKey))
+            {
+                return false;
+            }
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
                 var trigger = session.Load<Trigger>(triggerKey.Name + "/" + triggerKey.Group);
@@ -345,7 +369,6 @@ namespace Quartz.Impl.RavenDB
                         signaler.NotifySchedulerListenersJobDeleted(job.Key);
                     }
                 }
-
             }
             return true;
         }
@@ -363,7 +386,10 @@ namespace Quartz.Impl.RavenDB
 
         public bool ReplaceTrigger(TriggerKey triggerKey, IOperableTrigger newTrigger)
         {
-            if (!CheckExists(triggerKey)) return false;
+            if (!CheckExists(triggerKey))
+            {
+                return false;
+            }
             var wasRemoved = RemoveTrigger(triggerKey);
             if (wasRemoved)
             {
@@ -380,7 +406,10 @@ namespace Quartz.Impl.RavenDB
         public IOperableTrigger RetrieveTrigger(TriggerKey triggerKey)
         {
             // this check might not be necessary 
-            if (!CheckExists(triggerKey)) return null;
+            if (!CheckExists(triggerKey))
+            {
+                return null;
+            }
 
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
@@ -415,22 +444,28 @@ namespace Quartz.Impl.RavenDB
 
         public void ClearAllSchedulingData()
         {
-            var op = DocumentStoreHolder.Store.DatabaseCommands.DeleteByIndex("AllDocuments", new IndexQuery());
+            var op = DocumentStoreHolder.Store.DatabaseCommands.DeleteByIndex("Raven/DocumentsByEntityName", new IndexQuery(), new BulkOperationOptions() {AllowStale = true});
             op.WaitForCompletion();
         }
 
+        /// <exception cref="ObjectAlreadyExistsException">Condition.</exception>
         public void StoreCalendar(string name, ICalendar calendar, bool replaceExisting, bool updateTriggers)
         {
-            var calendarCopy = (ICalendar)calendar.Clone();
+            var calendarCopy = (ICalendar) calendar.Clone();
 
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
                 var sched = session.Load<Scheduler>(InstanceName);
 
-                if (sched?.Calendars == null) throw new NullReferenceException(string.Format(CultureInfo.InvariantCulture, "Scheduler with instance name '{0}' is null", InstanceName));
+                if (sched?.Calendars == null)
+                {
+                    throw new NullReferenceException(string.Format(CultureInfo.InvariantCulture, "Scheduler with instance name '{0}' is null", InstanceName));
+                }
 
-
-                if ((sched.Calendars.ContainsKey(name)) && (!replaceExisting)) throw new ObjectAlreadyExistsException(string.Format(CultureInfo.InvariantCulture, "Calendar with name '{0}' already exists.", name));
+                if ((sched.Calendars.ContainsKey(name)) && (!replaceExisting))
+                {
+                    throw new ObjectAlreadyExistsException(string.Format(CultureInfo.InvariantCulture, "Calendar with name '{0}' already exists.", name));
+                }
 
                 // add or replace calendar
                 sched.Calendars[name] = calendarCopy;
@@ -445,8 +480,6 @@ namespace Quartz.Impl.RavenDB
                     .Query<Trigger>()
                     .Where(t => t.CalendarName == name)
                     .ToList();
-
-
 
                 if (triggersToUpdate.Count == 0)
                 {
@@ -483,7 +516,9 @@ namespace Quartz.Impl.RavenDB
         public bool RemoveCalendar(string calName)
         {
             if (RetrieveCalendar(calName) == null)
+            {
                 return false;
+            }
             var calCollection = RetrieveCalendarCollection();
             calCollection.Remove(calName);
 
@@ -507,8 +542,14 @@ namespace Quartz.Impl.RavenDB
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
                 var sched = session.Load<Scheduler>(InstanceName);
-                if (sched == null) throw new NullReferenceException(string.Format(CultureInfo.InvariantCulture, "Scheduler with instance name '{0}' is null", InstanceName));
-                if (sched.Calendars == null) throw new NullReferenceException(string.Format(CultureInfo.InvariantCulture, "Calendar collection in '{0}' is null", InstanceName));
+                if (sched == null)
+                {
+                    throw new NullReferenceException(string.Format(CultureInfo.InvariantCulture, "Scheduler with instance name '{0}' is null", InstanceName));
+                }
+                if (sched.Calendars == null)
+                {
+                    throw new NullReferenceException(string.Format(CultureInfo.InvariantCulture, "Calendar collection in '{0}' is null", InstanceName));
+                }
                 return sched.Calendars;
             }
         }
@@ -557,13 +598,11 @@ namespace Quartz.Impl.RavenDB
                     result.Add(new JobKey(simpleKey.Name, simpleKey.Group));
                 }
                 return result;
-
             }
             else
             {
                 throw new NotImplementedException();
             }
-
         }
 
         public Collection.ISet<TriggerKey> GetTriggerKeys(GroupMatcher<TriggerKey> matcher)
@@ -573,7 +612,7 @@ namespace Quartz.Impl.RavenDB
 
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                return (Collection.ISet<TriggerKey>)session
+                return (Collection.ISet<TriggerKey>) session
                     .Query<Trigger>()
                     .Where(t => op.Evaluate(t.TriggerKey.Group, compareToValue))
                     .Select(t => t.TriggerKey)
@@ -653,15 +692,24 @@ namespace Quartz.Impl.RavenDB
 
         public void PauseTrigger(TriggerKey triggerKey)
         {
-            if (!CheckExists(triggerKey)) return;
+            if (!CheckExists(triggerKey))
+            {
+                return;
+            }
 
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
                 var trig = session.Load<Trigger>(triggerKey.Name + "/" + triggerKey.Group);
 
                 // if the trigger doesn't exist or is "complete" pausing it does not make sense...
-                if (trig == null) return;
-                if (trig.State == InternalTriggerState.Complete) return;
+                if (trig == null)
+                {
+                    return;
+                }
+                if (trig.State == InternalTriggerState.Complete)
+                {
+                    return;
+                }
 
                 trig.State = (trig.State == InternalTriggerState.Blocked ? InternalTriggerState.PausedAndBlocked : InternalTriggerState.Paused);
                 timeTriggers.Remove(trig);
@@ -680,7 +728,7 @@ namespace Quartz.Impl.RavenDB
                 Collection.ISet<string> pausedGroupsSet;
                 using (var session = DocumentStoreHolder.Store.OpenSession())
                 {
-                    pausedGroupsSet = (Collection.ISet<string>)session
+                    pausedGroupsSet = (Collection.ISet<string>) session
                         .Query<Trigger>()
                         .Where(t => t.TriggerKey.Group == compareToValue)
                         .Select(t => t.TriggerKey.Group)
@@ -722,7 +770,6 @@ namespace Quartz.Impl.RavenDB
 
             if (op.Equals(StringOperator.Equality))
             {
-
                 using (var session = DocumentStoreHolder.Store.OpenSession())
                 {
                     var sched = session.Load<Scheduler>(InstanceName);
@@ -757,7 +804,10 @@ namespace Quartz.Impl.RavenDB
 
         public void ResumeTrigger(TriggerKey triggerKey)
         {
-            if (!CheckExists(triggerKey)) return;
+            if (!CheckExists(triggerKey))
+            {
+                return;
+            }
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
                 var trigger = session.Load<Trigger>(triggerKey.Name + "/" + triggerKey.Group);
@@ -821,7 +871,6 @@ namespace Quartz.Impl.RavenDB
                     session.SaveChanges();
                 }
             }
-
 
             return new List<string>(groups);
         }
@@ -929,7 +978,7 @@ namespace Quartz.Impl.RavenDB
         /// </summary>
         /// <param name="trigger"></param>
         /// <returns></returns>
-      /*  protected virtual bool ApplyMisfire(Trigger Trigger)
+        /*  protected virtual bool ApplyMisfire(Trigger Trigger)
         {
             DateTimeOffset misfireTime = SystemTime.UtcNow();
             if (MisfireThreshold > TimeSpan.Zero)
@@ -990,7 +1039,7 @@ namespace Quartz.Impl.RavenDB
             DateTimeOffset misfireTime = SystemTime.UtcNow();
             if (MisfireThreshold > TimeSpan.Zero)
             {
-                misfireTime = misfireTime.AddMilliseconds(-1 * MisfireThreshold.TotalMilliseconds);
+                misfireTime = misfireTime.AddMilliseconds(-1*MisfireThreshold.TotalMilliseconds);
             }
 
             DateTimeOffset? tnft = trigger.NextFireTimeUtc;
@@ -1096,10 +1145,8 @@ namespace Quartz.Impl.RavenDB
                             excludedTriggers.Add(trigger);
                             continue; // go to next trigger in store.
                         }
-                        else
-                        {
-                            acquiredJobKeysForNoConcurrentExec.Add(jobKey);
-                        }
+                        acquiredJobKeysForNoConcurrentExec.Add(jobKey);
+                        
                     }
 
                     trigger.State = InternalTriggerState.Acquired;
@@ -1120,7 +1167,6 @@ namespace Quartz.Impl.RavenDB
                     }
                 }
                 session.SaveChanges();
-
             }
 
             // If we did excluded triggers to prevent ACQUIRE state due to DisallowConcurrentExecution, we need to add them back to store.
@@ -1146,7 +1192,6 @@ namespace Quartz.Impl.RavenDB
                 session.SaveChanges();
             }
         }
-
 
         public IList<TriggerFiredResult> TriggersFired(IList<IOperableTrigger> triggers)
         {

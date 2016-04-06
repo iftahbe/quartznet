@@ -78,7 +78,7 @@ namespace Tryouts
                     .WithIdentity("trigger1", "group1")
                     .StartNow()
                     .WithSimpleSchedule(x => x
-                        .WithIntervalInSeconds(1)
+                        .WithIntervalInSeconds(2)
                         .RepeatForever())
                     .Build();
 
@@ -94,7 +94,7 @@ namespace Tryouts
                     .WithDescription("Something")
                     .StartNow()
                     .WithSimpleSchedule(x => x
-                        .WithIntervalInSeconds(3)
+                        .WithIntervalInSeconds(2)
                         .RepeatForever())
                     .Build();
 
@@ -103,7 +103,7 @@ namespace Tryouts
                     .WithIdentity("calendarTrigger", "group2")
                     .StartNow()
                     .WithSimpleSchedule(x => x
-                        .WithIntervalInSeconds(4)
+                        .WithIntervalInSeconds(2)
                         .RepeatForever())
                     .ModifiedByCalendar("myHolidays") // but not on holidays
                     .Build();
@@ -121,9 +121,9 @@ namespace Tryouts
                     trigger3
                 };
 
-                scheduler.ScheduleJob(job1, triggerSet, true);
                 scheduler.ScheduleJob(job2, trigger4);
-                
+                scheduler.ScheduleJob(job1, triggerSet, true);
+
                 // some sleep to show what's happening
                 Thread.Sleep(TimeSpan.FromSeconds(600));
 
@@ -147,14 +147,7 @@ namespace Tryouts
         public void Execute(IJobExecutionContext context)
         {
             int count;
-            if (context.MergedJobDataMap["Count"] == null)
-            {
-                count = 1;
-            }
-            else
-            {
-                count = context.MergedJobDataMap.GetIntValue("Count");
-            }
+            count = context.MergedJobDataMap["Count"] == null ? 1 : context.MergedJobDataMap.GetIntValue("Count");
             //var count = (int?)context.MergedJobDataMap["Count"] ?? 1;
 
             Console.WriteLine("Greetings from ExampleJob1! Count:" + count);
