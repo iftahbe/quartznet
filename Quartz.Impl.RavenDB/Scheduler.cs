@@ -14,6 +14,6 @@ namespace Quartz.Impl.RavenDB
         public Collection.HashSet<string> Locks { get; set; }
         public Collection.HashSet<string> PausedJobGroups { get; set; }
         public Collection.HashSet<string> PausedTriggerGroups { get; set; }
-        public Collection.HashSet<SimpleKey> BlockedJobs { get; set; }
+        public Collection.HashSet<string> BlockedJobs { get; set; }
     }
 }  

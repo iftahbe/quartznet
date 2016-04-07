@@ -39,7 +39,7 @@ namespace Tryouts
                 //["quartz.ravendb.connectionString"] = "Url=http://localhost:8080;DefaultDatabase=IftahDB",
                
                 
-              /*  ["quartz.jobStore.misfireThreshold"] = "60000",
+                /*["quartz.jobStore.misfireThreshold"] = "60000",
                 ["quartz.jobStore.type"] = "Quartz.Impl.AdoJobStore.JobStoreTX, Quartz",
                 ["quartz.jobStore.useProperties"] = "false",
                 ["quartz.jobStore.dataSource"] = "default",

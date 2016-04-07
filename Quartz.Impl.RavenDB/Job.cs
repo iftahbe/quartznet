@@ -9,7 +9,10 @@ namespace Quartz.Impl.RavenDB
 {
     internal class Job
     {
-        public SimpleKey Key { get; set; }
+        public string Name { get; set; }
+        public string Group { get; set; }
+        public string Key { get; set; }
+
         public string Description { get; set; }
         public Type JobType { get; set; }
         public bool Durable { get; set; }
@@ -21,7 +24,10 @@ namespace Quartz.Impl.RavenDB
         public Job(IJobDetail newJob)
         {
             if (newJob == null) return;
-            Key = new SimpleKey(newJob.Key.Name, newJob.Key.Group);
+            Name = newJob.Key.Name;
+            Group = newJob.Key.Group;
+            Key = Name + "/" + Group;
+
             Description = newJob.Description;
             JobType = newJob.JobType;
             Durable = newJob.Durable;
@@ -34,7 +40,7 @@ namespace Quartz.Impl.RavenDB
         public IJobDetail Deserialize()
         {
             return JobBuilder.Create()
-                    .WithIdentity(Key.Name, Key.Group)
+                    .WithIdentity(Name, Group)
                     .WithDescription(Description)
                     .OfType(JobType)
                     .RequestRecovery(RequestsRecovery)

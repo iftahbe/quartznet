@@ -13,7 +13,7 @@ namespace Quartz.Impl.RavenDB
             {
                 Map = @"from doc in docs.Jobs
                         select new {
-	                        Key_Group = doc.Key.Group
+	                        Group = doc.Group
                         }"
             };
         }

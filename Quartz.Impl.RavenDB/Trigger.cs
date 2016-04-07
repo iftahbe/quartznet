@@ -9,16 +9,21 @@ namespace Quartz.Impl.RavenDB
 {
     public class Trigger
     {
-        public SimpleKey TriggerKey { get; set; }
-        public SimpleKey JobKey { get; set; }
-        public InternalTriggerState State { get; set; }
+        public string Name { get; set; }
+        public string Group { get; set; }
+        public string Key { get; set; }
 
+        public string JobName { get; set; }
+        public string JobGroup { get; set; }
+        public string JobKey { get; set; }
+
+        public InternalTriggerState State { get; set; }
         public string Description { get; set; }
         public string CalendarName { get; set; }
         public JobDataMap JobDataMap { get; set; }
         public string FireInstanceId { get; set; }
-        public DateTimeOffset? FinalFireTimeUtc { get; set; }
         public int MisfireInstruction { get; set; }
+        public DateTimeOffset? FinalFireTimeUtc { get; set; }
         public DateTimeOffset? EndTimeUtc { get; set; }
         public DateTimeOffset StartTimeUtc { get; set; }
         public DateTimeOffset? NextFireTimeUtc { get; set; }
@@ -71,8 +76,15 @@ namespace Quartz.Impl.RavenDB
         {
             if (newTrigger == null) return;
 
-            TriggerKey = new SimpleKey(newTrigger.Key.Name, newTrigger.Key.Group);
-            JobKey = new SimpleKey(newTrigger.JobKey.Name, newTrigger.JobKey.Group);
+            Name = newTrigger.Key.Name;
+            Group = newTrigger.Key.Group;
+            Key = Name + "/" + Group;
+
+            JobName = newTrigger.JobKey.Name;
+            JobGroup = newTrigger.JobKey.Group;
+            JobKey = JobName + "/" + JobGroup;
+
+            State = InternalTriggerState.Waiting;
             Description = newTrigger.Description;
             CalendarName = newTrigger.CalendarName;
             JobDataMap = newTrigger.JobDataMap;
@@ -86,7 +98,6 @@ namespace Quartz.Impl.RavenDB
             NextFireTimeUtc = newTrigger.GetNextFireTimeUtc();
             PreviousFireTimeUtc = newTrigger.GetPreviousFireTimeUtc();
 
-            State = InternalTriggerState.Waiting;
             
             // Init trigger specific properties according to type of newTrigger. 
             // If an option doesn't apply to the type of trigger it will stay null by default.
@@ -148,13 +159,13 @@ namespace Quartz.Impl.RavenDB
         public IOperableTrigger Deserialize()
         {
             var triggerBuilder = TriggerBuilder.Create()
-               .WithIdentity(TriggerKey.Name, TriggerKey.Group)
+               .WithIdentity(Name, Group)
                .WithDescription(Description)
                .ModifiedByCalendar(CalendarName)
                .WithPriority(Priority)
                .StartAt(StartTimeUtc)
                .EndAt(EndTimeUtc)
-               .ForJob(new JobKey(JobKey.Name,JobKey.Group))
+               .ForJob(new JobKey(JobName,JobGroup))
                .UsingJobData(JobDataMap);
             
 

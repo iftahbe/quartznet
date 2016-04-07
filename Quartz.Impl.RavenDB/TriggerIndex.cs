@@ -16,10 +16,9 @@ namespace Quartz.Impl.RavenDB
             {
                 Map = @"from doc in docs.Triggers
                     select new {
-	                    JobKey_Group = doc.JobKey.Group,
-	                    JobKey_Name = doc.JobKey.Name,
 	                    CalendarName = doc.CalendarName,
-	                    JobKey = doc.JobKey
+	                    JobGroup = doc.JobGroup,
+	                    JobName = doc.JobName
                     }"
             };
         }
