@@ -310,6 +310,7 @@ namespace Quartz.Tests.Unit.Simpl
         public void TestStoreAndRetrieveTriggers()
         {
             var store = new RavenJobStore();
+            store.SchedulerStarted();
 
             // Store jobs and triggers.
             for (int i = 0; i < 10; i++)
@@ -342,6 +343,7 @@ namespace Quartz.Tests.Unit.Simpl
 
             var store = new RavenJobStore();
             store.Initialize(loadHelper, schedSignaler);
+            store.SchedulerStarted();
 
             // Setup: Store jobs and triggers.
             DateTime startTime0 = DateTime.UtcNow.AddMinutes(1).ToUniversalTime(); // a min from now.

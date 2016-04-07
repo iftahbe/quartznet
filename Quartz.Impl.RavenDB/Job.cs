@@ -12,6 +12,7 @@ namespace Quartz.Impl.RavenDB
         public string Name { get; set; }
         public string Group { get; set; }
         public string Key { get; set; }
+        public string Scheduler { get; set; }
 
         public string Description { get; set; }
         public Type JobType { get; set; }
@@ -21,12 +22,13 @@ namespace Quartz.Impl.RavenDB
         public bool RequestsRecovery { get; set; }
         public IDictionary<string, object> JobDataMap { get; set; }
 
-        public Job(IJobDetail newJob)
+        public Job(IJobDetail newJob, string schedulerInstanceName)
         {
             if (newJob == null) return;
             Name = newJob.Key.Name;
             Group = newJob.Key.Group;
             Key = Name + "/" + Group;
+            Scheduler = schedulerInstanceName;
 
             Description = newJob.Description;
             JobType = newJob.JobType;

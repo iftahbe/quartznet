@@ -187,6 +187,7 @@ namespace Quartz.Impl.AdoJobStore
                 AddCommandParameter(cmd, "newState", newState);
                 AddCommandParameter(cmd, "oldState1", oldState1);
                 AddCommandParameter(cmd, "oldState2", oldState2);
+                Console.WriteLine("UpdateTriggerStatesFromOtherStates");
                 return cmd.ExecuteNonQuery();
             }
         }
@@ -227,6 +228,7 @@ namespace Quartz.Impl.AdoJobStore
             using (IDbCommand cmd = PrepareCommand(conn, ReplaceTablePrefix(SqlSelectTriggersInState)))
             {
                 AddCommandParameter(cmd, "state", state);
+                Console.WriteLine("SelectTriggersInState");
                 using (IDataReader rs = cmd.ExecuteReader())
                 {
                     List<TriggerKey> list = new List<TriggerKey>();
@@ -290,6 +292,7 @@ namespace Quartz.Impl.AdoJobStore
                 AddCommandParameter(cmd, "nextFireTime", GetDbDateTimeValue(ts));
                 AddCommandParameter(cmd, "state1", state1);
 
+                Console.WriteLine("HasMisfiredTriggersInState");
                 using (IDataReader rs = cmd.ExecuteReader())
                 {
                     bool hasReachedLimit = false;
@@ -393,7 +396,7 @@ namespace Quartz.Impl.AdoJobStore
             {
                 AddCommandParameter(cmd, "instanceName", instanceId);
                 AddCommandParameter(cmd, "requestsRecovery", GetDbBooleanValue(true));
-
+                Console.WriteLine("SelectTriggersForRecoveringJobs");
                 using (IDataReader rs = cmd.ExecuteReader())
                 {
                     long dumId = SystemTime.UtcNow().Ticks;
@@ -455,6 +458,7 @@ namespace Quartz.Impl.AdoJobStore
         {
             using (IDbCommand cmd = PrepareCommand(conn, ReplaceTablePrefix(SqlDeleteFiredTriggers)))
             {
+                Console.WriteLine("DeleteFiredTriggers");
                 return cmd.ExecuteNonQuery();
             }
         }

@@ -14,8 +14,8 @@ namespace Quartz.Impl.RavenDB
         public string Key { get; set; }
 
         public string JobName { get; set; }
-        public string JobGroup { get; set; }
         public string JobKey { get; set; }
+        public string Scheduler { get; set; }
 
         public InternalTriggerState State { get; set; }
         public string Description { get; set; }
@@ -27,6 +27,8 @@ namespace Quartz.Impl.RavenDB
         public DateTimeOffset? EndTimeUtc { get; set; }
         public DateTimeOffset StartTimeUtc { get; set; }
         public DateTimeOffset? NextFireTimeUtc { get; set; }
+        public long NextFireTimeTicks { get; set; } // Used for sorting triggers by time - more efficient than sorting strings
+
         public DateTimeOffset? PreviousFireTimeUtc { get; set; }
         public int Priority { get; set; }
         public bool HasMillisecondPrecision { get; set; }
@@ -72,7 +74,7 @@ namespace Quartz.Impl.RavenDB
 
         }
 
-        public Trigger(IOperableTrigger newTrigger)
+        public Trigger(IOperableTrigger newTrigger, string schedulerInstanceName)
         {
             if (newTrigger == null) return;
 
@@ -81,8 +83,8 @@ namespace Quartz.Impl.RavenDB
             Key = Name + "/" + Group;
 
             JobName = newTrigger.JobKey.Name;
-            JobGroup = newTrigger.JobKey.Group;
-            JobKey = JobName + "/" + JobGroup;
+            JobKey = JobName + "/" + newTrigger.JobKey.Group;
+            Scheduler = schedulerInstanceName;
 
             State = InternalTriggerState.Waiting;
             Description = newTrigger.Description;
@@ -98,7 +100,11 @@ namespace Quartz.Impl.RavenDB
             NextFireTimeUtc = newTrigger.GetNextFireTimeUtc();
             PreviousFireTimeUtc = newTrigger.GetPreviousFireTimeUtc();
 
-            
+            if (NextFireTimeUtc != null)
+            {
+                NextFireTimeTicks = NextFireTimeUtc.Value.UtcTicks;
+            }
+
             // Init trigger specific properties according to type of newTrigger. 
             // If an option doesn't apply to the type of trigger it will stay null by default.
 
@@ -165,7 +171,7 @@ namespace Quartz.Impl.RavenDB
                .WithPriority(Priority)
                .StartAt(StartTimeUtc)
                .EndAt(EndTimeUtc)
-               .ForJob(new JobKey(JobName,JobGroup))
+               .ForJob(new JobKey(JobName,Group))
                .UsingJobData(JobDataMap);
             
 
@@ -226,6 +232,10 @@ namespace Quartz.Impl.RavenDB
         {
             NextFireTimeUtc = trig.GetNextFireTimeUtc();
             PreviousFireTimeUtc = trig.GetPreviousFireTimeUtc();
+            if (NextFireTimeUtc != null)
+            {
+                NextFireTimeTicks = NextFireTimeUtc.Value.UtcTicks;
+            }
         }
     }
 
