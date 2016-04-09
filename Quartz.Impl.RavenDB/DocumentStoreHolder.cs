@@ -6,12 +6,9 @@ namespace Quartz.Impl.RavenDB
 {
     public class DocumentStoreHolder
     {
-        private readonly static Lazy<IDocumentStore> _store = new Lazy<IDocumentStore>(CreateStore);
+        private static readonly Lazy<IDocumentStore> store = new Lazy<IDocumentStore>(CreateStore);
 
-        public static IDocumentStore Store
-        {
-            get { return _store.Value; }
-        }
+        public static IDocumentStore Store => store.Value;
 
         private static IDocumentStore CreateStore()
         {

@@ -41,41 +41,36 @@ namespace Quartz.Impl.RavenDB
         public static string Url { get; set; }
         public static string DefaultDatabase { get; set; }
 
-        private readonly ILog log;
-        protected ILog Log => log;
+        protected ILog Log { get; }
 
         public RavenJobStore()
         {
-            log = LogManager.GetLogger(GetType());
+            Log = LogManager.GetLogger(GetType());
 
-            var stringBuilder = new DbConnectionStringBuilder();
-
-            if (ConfigurationManager.ConnectionStrings["quartznet-ravendb"] != null)
+            var stringBuilder = new DbConnectionStringBuilder
             {
-                stringBuilder.ConnectionString = ConfigurationManager.ConnectionStrings["quartznet-ravendb"].ConnectionString;
-            }
-            else
-            {
-                stringBuilder.ConnectionString = defaultConnectionString;
-            }
+                ConnectionString = ConfigurationManager.ConnectionStrings["quartznet-ravendb"] != null ?
+                    ConfigurationManager.ConnectionStrings["quartznet-ravendb"].ConnectionString :
+                    defaultConnectionString
+            };
 
-            Url = stringBuilder["Url"] as string;
-            DefaultDatabase = stringBuilder["DefaultDatabase"] as string;
+
+            try
+            {
+                Url = stringBuilder["Url"] as string;
+                DefaultDatabase = stringBuilder["DefaultDatabase"] as string;
+            }
+            catch (Exception e)
+            {
+                Log.Warn("Check connection string", e);
+            }
 
             InstanceName = "UnitTestScheduler";
             InstanceId = "instance_two";
 
-            try
-            {
-                new TriggerIndex().Execute(DocumentStoreHolder.Store);
-                new JobIndex().Execute(DocumentStoreHolder.Store);
-
-            }
-            catch
-            {
-            }
-
-            //ClearAllSchedulingData();
+            
+            new TriggerIndex().Execute(DocumentStoreHolder.Store);
+            new JobIndex().Execute(DocumentStoreHolder.Store);
         }
 
         public void Initialize(ITypeLoadHelper loadHelper, ISchedulerSignaler s)
@@ -478,19 +473,30 @@ namespace Quartz.Impl.RavenDB
 
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                var trig = session.Load<Trigger>(triggerKey.Name + "/" + triggerKey.Group);
+                var trigger = session.Load<Trigger>(triggerKey.Name + "/" + triggerKey.Group);
 
-                return (trig == null) ? null : trig.Deserialize();
+                return trigger?.Deserialize();
             }
         }
 
         public bool CalendarExists(string calName)
         {
+            bool answer;
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
                 var sched = session.Load<Scheduler>(InstanceName);
-                return sched.Calendars.ContainsKey(calName);
+                if (sched == null) return false;
+                try
+                {
+                    answer = sched.Calendars.ContainsKey(calName);
+                }
+                catch (ArgumentNullException argumentNullException)
+                {
+                    Log.Error("Calendar is null.", argumentNullException);
+                    answer = false;
+                }
             }
+            return answer;
         }
 
         public bool CheckExists(JobKey jobKey)
@@ -527,7 +533,7 @@ namespace Quartz.Impl.RavenDB
                     throw new NullReferenceException(string.Format(CultureInfo.InvariantCulture, "Scheduler with instance name '{0}' is null", InstanceName));
                 }
 
-                if ((sched.Calendars.ContainsKey(name)) && (!replaceExisting))
+                if (CalendarExists(name) && (!replaceExisting))
                 {
                     throw new ObjectAlreadyExistsException(string.Format(CultureInfo.InvariantCulture, "Calendar with name '{0}' already exists.", name));
                 }
@@ -556,7 +562,7 @@ namespace Quartz.Impl.RavenDB
                 {
                     var triggerToUpdate = session.Load<Trigger>(triggerKey);
                     var trigger = triggerToUpdate.Deserialize();
-                    bool removed = timeTriggers.Remove(triggerToUpdate);
+                    var removed = timeTriggers.Remove(triggerToUpdate);
                     trigger.UpdateWithNewCalendar(calendarCopy, misfireThreshold);
                     triggerToUpdate.UpdateFireTimes(trigger);
                     if (removed)
