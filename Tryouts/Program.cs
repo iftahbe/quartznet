@@ -78,7 +78,7 @@ namespace Tryouts
                     .WithIdentity("trigger1", "group1")
                     .StartNow()
                     .WithSimpleSchedule(x => x
-                        .WithIntervalInSeconds(2)
+                        .WithIntervalInSeconds(1)
                         .RepeatForever())
                     .Build();
 
@@ -86,7 +86,7 @@ namespace Tryouts
                     .WithIdentity("trigger2", "group1")
                     .StartNow()
                     .WithSimpleSchedule(x => x
-                        .WithIntervalInSeconds(2)
+                        .WithIntervalInSeconds(1)
                         .RepeatForever())
                     .Build();
                 ITrigger trigger3 = TriggerBuilder.Create()
@@ -94,7 +94,7 @@ namespace Tryouts
                     .WithDescription("Something")
                     .StartNow()
                     .WithSimpleSchedule(x => x
-                        .WithIntervalInSeconds(2)
+                        .WithIntervalInSeconds(1)
                         .RepeatForever())
                     .Build();
 
@@ -102,10 +102,11 @@ namespace Tryouts
                 ITrigger trigger4 = TriggerBuilder.Create()
                     .WithIdentity("calendarTrigger", "group2")
                     .StartNow()
+                    .WithCalendarIntervalSchedule()
                     .WithSimpleSchedule(x => x
-                        .WithIntervalInSeconds(2)
+                        .WithIntervalInSeconds(3)
                         .RepeatForever())
-                    .ModifiedByCalendar("myHolidays") // but not on holidays
+                    //.ModifiedByCalendar("myHolidays") // but not on holidays
                     .Build();
 
                 // Adding calendar for exluding days - triggers won't work on those days
@@ -121,8 +122,10 @@ namespace Tryouts
                     trigger3
                 };
 
-                scheduler.ScheduleJob(job2, trigger4);
                 //scheduler.ScheduleJob(job1, trigger1);
+                //scheduler.ScheduleJob(job1, trigger2);
+
+                scheduler.ScheduleJob(job2, trigger4);
 
                 scheduler.ScheduleJob(job1, triggerSet, true);
 
@@ -152,9 +155,10 @@ namespace Tryouts
             count = context.MergedJobDataMap["Count"] == null ? 1 : context.MergedJobDataMap.GetIntValue("Count");
             //var count = (int?)context.MergedJobDataMap["Count"] ?? 1;
 
-            Console.WriteLine("Greetings from ExampleJob1! Count:" + count);
+            Console.WriteLine("ExampleJob1 --> Trigger: {0} Count: {1}" ,context.Trigger.Key, count);
 
             context.JobDetail.JobDataMap.Put("Count", ++count);
+            
         }
     }
 
@@ -164,7 +168,7 @@ namespace Tryouts
     {
         public void Execute(IJobExecutionContext context)
         {
-            Console.WriteLine("Greetings from ExampleJob 2!");
+            Console.WriteLine("ExampleJob2 --> Trigger: {0}", context.Trigger.Key);
         }
 
     }

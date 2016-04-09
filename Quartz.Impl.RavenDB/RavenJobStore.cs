@@ -13,7 +13,6 @@ using Raven.Abstractions.Commands;
 using Raven.Abstractions.Data;
 using Raven.Abstractions.Extensions;
 
-using Quartz.Collection;
 using Quartz.Simpl;
 
 using Raven.Abstractions.Indexing;
@@ -27,7 +26,6 @@ namespace Quartz.Impl.RavenDB
         private TimeSpan misfireThreshold = TimeSpan.FromSeconds(5);
         private ISchedulerSignaler signaler;
         private static long ftrCtr = SystemTime.UtcNow().Ticks;
-        private readonly TreeSet<Trigger> timeTriggers = new TreeSet<Trigger>(new TriggerComparator());
 
         public bool SupportsPersistence => true;
         public long EstimatedTimeToReleaseAndAcquireTrigger => 100;
@@ -90,15 +88,44 @@ namespace Quartz.Impl.RavenDB
 
         public void SchedulerStarted()
         {
-            try
+            var cmds = DocumentStoreHolder.Store.DatabaseCommands;
+            var docMetaData = cmds.Head(InstanceName);
+            if (docMetaData != null)
             {
-                RecoverSchedulerData();
-                StoreScheduler(false);
+                // Scheduler with same instance name already exists, recover persistent data
+                try
+                {
+                    RecoverSchedulerData();
+                }
+                catch (SchedulerException se)
+                {
+                    throw new SchedulerConfigException("Failure occurred during job recovery.", se);
+                }
+
+
+                return;
             }
-            catch (SchedulerException se)
+
+            // Create new empty scheduler and store it
+            var schedToStore = new Scheduler
             {
-                throw new SchedulerConfigException("Failure occurred during job recovery.", se);
+                InstanceName = this.InstanceName,
+                LastCheckinTime = DateTimeOffset.MinValue,
+                CheckinInterval = DateTimeOffset.MinValue,
+                Calendars = new Dictionary<string, ICalendar>(),
+                Locks = new Collection.HashSet<string>(),
+                PausedJobGroups = new Collection.HashSet<string>(),
+                PausedTriggerGroups = new Collection.HashSet<string>(),
+                BlockedJobs = new Collection.HashSet<string>()
+            };
+
+            using (var session = DocumentStoreHolder.Store.OpenSession())
+            {
+                session.Store(schedToStore, InstanceName);
+                session.SaveChanges();
             }
+
+
 
             SetSchedulerState("Started");
         }
@@ -254,39 +281,6 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
-        public void StoreScheduler(bool replaceExisting)
-        {
-            var cmds = DocumentStoreHolder.Store.DatabaseCommands;
-            var docMetaData = cmds.Head(InstanceName);
-            if (docMetaData != null)
-            {
-                if (!replaceExisting)
-                {
-                    // Scheduler with same instance name already exists, no need to initialize it
-                    return;
-                }
-            }
-
-            // Create new empty scheduler and store it
-            var schedToStore = new Scheduler
-            {
-                InstanceName = this.InstanceName,
-                LastCheckinTime = DateTimeOffset.MinValue,
-                CheckinInterval = DateTimeOffset.MinValue,
-                Calendars = new Dictionary<string, ICalendar>(),
-                Locks = new Collection.HashSet<string>(),
-                PausedJobGroups = new Collection.HashSet<string>(),
-                PausedTriggerGroups = new Collection.HashSet<string>(),
-                BlockedJobs = new Collection.HashSet<string>()
-            };
-
-            using (var session = DocumentStoreHolder.Store.OpenSession())
-            {
-                session.Store(schedToStore, InstanceName);
-                session.SaveChanges();
-            }
-        }
-
         public void StoreJobsAndTriggers(IDictionary<IJobDetail, Collection.ISet<ITrigger>> triggersAndJobs, bool replace)
         {
             using (var bulkInsert = DocumentStoreHolder.Store.BulkInsert(options: new BulkInsertOptions() { OverwriteExisting = replace }))
@@ -315,10 +309,6 @@ namespace Quartz.Impl.RavenDB
                         else if (GetBlockedJobs().Contains(operTrig.JobKey.Name + "/" + operTrig.JobKey.Group))
                         {
                             trigger.State = InternalTriggerState.Blocked;
-                        }
-                        else
-                        {
-                            timeTriggers.Add(trigger);
                         }
 
                         bulkInsert.Store(trigger, trigger.Key);
@@ -396,10 +386,6 @@ namespace Quartz.Impl.RavenDB
             {
                 trigger.State = InternalTriggerState.Blocked;
             }
-            else
-            {
-                timeTriggers.Add(trigger);
-            }
 
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
@@ -420,7 +406,7 @@ namespace Quartz.Impl.RavenDB
                 var trigger = session.Load<Trigger>(triggerKey.Name + "/" + triggerKey.Group);
                 var job = RetrieveJob(new JobKey(trigger.JobName, trigger.Group));
                 var trigList = GetTriggersForJob(job.Key);
-                timeTriggers.Remove(trigger);
+                
                 // Remove the trigger's job if it is not associated with any other triggers
                 if ((trigList == null || trigList.Count == 0) && !job.Durable)
                 {
@@ -453,11 +439,6 @@ namespace Quartz.Impl.RavenDB
             var wasRemoved = RemoveTrigger(triggerKey);
             if (wasRemoved)
             {
-                using (var session = DocumentStoreHolder.Store.OpenSession())
-                {
-                    var trigger = session.Load<Trigger>(triggerKey.Name + "/" + triggerKey.Group);
-                    timeTriggers.Remove(trigger);
-                }
                 StoreTrigger(newTrigger, true);
             }
             return wasRemoved;
@@ -562,13 +543,9 @@ namespace Quartz.Impl.RavenDB
                 {
                     var triggerToUpdate = session.Load<Trigger>(triggerKey);
                     var trigger = triggerToUpdate.Deserialize();
-                    var removed = timeTriggers.Remove(triggerToUpdate);
                     trigger.UpdateWithNewCalendar(calendarCopy, misfireThreshold);
                     triggerToUpdate.UpdateFireTimes(trigger);
-                    if (removed)
-                    {
-                        timeTriggers.Add(triggerToUpdate);
-                    }
+               
                 }
                 session.SaveChanges();
             }
@@ -773,7 +750,6 @@ namespace Quartz.Impl.RavenDB
                 }
 
                 trig.State = (trig.State == InternalTriggerState.Blocked ? InternalTriggerState.PausedAndBlocked : InternalTriggerState.Paused);
-                timeTriggers.Remove(trig);
                 session.SaveChanges();
             }
         }
@@ -888,12 +864,7 @@ namespace Quartz.Impl.RavenDB
                 }
 
                 ApplyMisfire(trigger);
-
-                if (trigger.State == InternalTriggerState.Waiting)
-                {
-                    timeTriggers.Add(trigger);
-                }
-
+                
                 session.SaveChanges();
             }
         }
@@ -934,6 +905,7 @@ namespace Quartz.Impl.RavenDB
 
         public Collection.ISet<string> GetPausedTriggerGroups()
         {
+
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
                 return session.Load<Scheduler>(InstanceName).PausedTriggerGroups;
@@ -1101,17 +1073,12 @@ namespace Quartz.Impl.RavenDB
                 signaler.NotifySchedulerListenersFinalized(trig);
 
                 // Prepare database trigger with new state and calculated fire times
-                trigger.State = InternalTriggerState.Complete;
-                trigger.NextFireTimeUtc = trig.GetNextFireTimeUtc();
-                trigger.PreviousFireTimeUtc = trig.GetPreviousFireTimeUtc();
+                //trigger.State = InternalTriggerState.Complete;
+                //trigger.NextFireTimeUtc = trig.GetNextFireTimeUtc();
+                //trigger.PreviousFireTimeUtc = trig.GetPreviousFireTimeUtc();
 
-                using (var session = DocumentStoreHolder.Store.OpenSession())
-                {
-                    session.Store(trigger);
-                    session.SaveChanges();
-                }
+                StoreTrigger(trig, true);
 
-                timeTriggers.Remove(trigger);
             }
             else if (tnft.Equals(trigger.NextFireTimeUtc))
             {
@@ -1125,49 +1092,36 @@ namespace Quartz.Impl.RavenDB
         {
             List<IOperableTrigger> result = new List<IOperableTrigger>();
             Collection.ISet<JobKey> acquiredJobKeysForNoConcurrentExec = new Collection.HashSet<JobKey>();
-            Collection.ISet<Trigger> excludedTriggers = new Collection.HashSet<Trigger>();
-            DateTimeOffset? firstAcquiredTriggerFireTime = null;
-
-            // return empty list if store has no triggers.
-            if (timeTriggers.Count == 0)
+            
+            
+            using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                return result;
-            }
-                using (var session = DocumentStoreHolder.Store.OpenSession())
+                var triggers = session.Query<Trigger>()
+                    .Where(t => (t.State == InternalTriggerState.Waiting) && (t.NextFireTimeUtc <= noLaterThan) &&
+                                ((t.MisfireInstruction == -1) || ((t.MisfireInstruction != -1) && (t.NextFireTimeUtc >= MisfireTime))))
+                    .OrderBy(t => t.NextFireTimeTicks)
+                    .ThenByDescending(t => t.Priority);
+
+                // return empty list if store has no such triggers.
+                if (triggers == null)
                 {
-                while (true)
-                    {
-                    var trigger = timeTriggers.First();
-                    if (trigger == null)
-                    {
-                        break;
-                    }
+                    return result;
+                }
 
-                        if (!timeTriggers.Remove(trigger))
-                    {
-                        break;
-                    }
-
+                foreach (var trigger in triggers)
+                {
                     if (trigger.NextFireTimeUtc == null)
                     {
                         continue;
                     }
-
                     if (ApplyMisfire(trigger))
                     {
-                        if (trigger.NextFireTimeUtc != null)
-                        {
-                                timeTriggers.Add(trigger);
-                        }
                         continue;
                     }
-
                     if (trigger.NextFireTimeUtc > noLaterThan + timeWindow)
                     {
-                            timeTriggers.Add(trigger);
                         break;
                     }
-
                     // If trigger's job is set as @DisallowConcurrentExecution, and it has already been added to result, then
                     // put it back into the timeTriggers set and continue to search for next trigger.
                     JobKey jobKey = new JobKey(trigger.JobName, trigger.Group);
@@ -1177,11 +1131,9 @@ namespace Quartz.Impl.RavenDB
                     {
                         if (acquiredJobKeysForNoConcurrentExec.Contains(jobKey))
                         {
-                            excludedTriggers.Add(trigger);
                             continue; // go to next trigger in store.
                         }
                         acquiredJobKeysForNoConcurrentExec.Add(jobKey);
-                        
                     }
 
                     trigger.State = InternalTriggerState.Acquired;
@@ -1191,11 +1143,6 @@ namespace Quartz.Impl.RavenDB
 
                     result.Add(trigger.Deserialize());
 
-                    if (firstAcquiredTriggerFireTime == null)
-                    {
-                        firstAcquiredTriggerFireTime = trigger.NextFireTimeUtc;
-                    }
-
                     if (result.Count == maxCount)
                     {
                         break;
@@ -1203,12 +1150,9 @@ namespace Quartz.Impl.RavenDB
                 }
                 session.SaveChanges();
             }
-
-            // If we did excluded triggers to prevent ACQUIRE state due to DisallowConcurrentExecution, we need to add them back to store.
-            if (excludedTriggers.Count > 0)
-            {
-                timeTriggers.AddAll(excludedTriggers);
-            }
+            
+            //Log.Info("AcquireNextTriggers, Result:\n");
+            //result.ForEach(i => Console.Write("{0}\n", i.Key));
             return result;
         }
 
@@ -1217,12 +1161,11 @@ namespace Quartz.Impl.RavenDB
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
                 var trigger = session.Load<Trigger>(trig.Key.Name + "/" + trig.Key.Group);
-                if (trigger == null) //|| (Trigger.State != InternalTriggerState.Acquired))
+                if ((trigger == null) || (trigger.State != InternalTriggerState.Acquired))
                 {
                     return;
                 }
                 trigger.State = InternalTriggerState.Waiting;
-                timeTriggers.Add(trigger);
                 session.SaveChanges();
             }
         }
@@ -1264,8 +1207,6 @@ namespace Quartz.Impl.RavenDB
                         }
                     }
                     DateTimeOffset? prevFireTime = trigger.PreviousFireTimeUtc;
-                    // in case trigger was replaced between acquiring and firing
-                    timeTriggers.Remove(trigger);
 
                     var trig = trigger.Deserialize();
                     trig.Triggered(cal);
@@ -1284,11 +1225,10 @@ namespace Quartz.Impl.RavenDB
 
                     if (job.ConcurrentExecutionDisallowed)
                     {
-                        List<Trigger> trigs = session.Query<Trigger>()
-                            .Where(t => Equals(t.Group, job.Key.Group) && Equals(t.JobName, job.Key.Name))
-                            .ToList();
+                        var trigs = session.Query<Trigger>()
+                            .Where(t => Equals(t.Group, job.Key.Group) && Equals(t.JobName, job.Key.Name));
 
-                        foreach (Trigger t in trigs)
+                        foreach (var t in trigs)
                         {
                             if (t.State == InternalTriggerState.Waiting)
                             {
@@ -1298,14 +1238,9 @@ namespace Quartz.Impl.RavenDB
                             {
                                 t.State = InternalTriggerState.PausedAndBlocked;
                             }
-                            timeTriggers.Remove(t);
                         }
                         var sched = session.Load<Scheduler>(InstanceName);
                         sched.BlockedJobs.Add(job.Key.Name + "/" + job.Key.Group);
-                    }
-                    else if (trigger.NextFireTimeUtc != null)
-                    {
-                        timeTriggers.Add(trigger);
                     }
 
                     results.Add(new TriggerFiredResult(bndle));
@@ -1346,7 +1281,6 @@ namespace Quartz.Impl.RavenDB
                             if (t.State == InternalTriggerState.Blocked)
                             {
                                 triggerToUpdate.State = InternalTriggerState.Waiting;
-                                timeTriggers.Add(triggerToUpdate);
                             }
                             if (t.State == InternalTriggerState.PausedAndBlocked)
                             {
@@ -1393,7 +1327,6 @@ namespace Quartz.Impl.RavenDB
                     else if (triggerInstCode == SchedulerInstruction.SetTriggerComplete)
                     {
                         trigger.State = InternalTriggerState.Complete;
-                        timeTriggers.Remove(trigger);
                         signaler.SignalSchedulingChange(null);
                     }
                     else if (triggerInstCode == SchedulerInstruction.SetTriggerError)
@@ -1425,18 +1358,13 @@ namespace Quartz.Impl.RavenDB
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                List<Trigger> trigs = session.Query<Trigger>()
-                    .Where(t => Equals(t.Group, jobKey.Group) && Equals(t.JobName, jobKey.Name))
-                    .ToList();
+                var trigs = session.Query<Trigger>()
+                    .Where(t => Equals(t.Group, jobKey.Group) && Equals(t.JobName, jobKey.Name));
 
                 foreach (var trig in trigs)
                 {
                     var triggerToUpdate = session.Load<Trigger>(trig.Key);
-                    trig.State = state;
-                    if (state != InternalTriggerState.Waiting)
-                    {
-                        timeTriggers.Remove(trig);
-                    }
+                    triggerToUpdate.State = state;
                 }
                 session.SaveChanges();
             }
