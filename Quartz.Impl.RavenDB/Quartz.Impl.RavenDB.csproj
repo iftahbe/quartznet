@@ -75,6 +75,7 @@
     <Compile Include="RecoverMisfiredJobsResult.cs" />
     <Compile Include="DocumentStoreHolder.cs" />
     <Compile Include="JobIndex.cs" />
+    <Compile Include="ThreadPrinter.cs" />
     <Compile Include="TriggerIndex.cs" />
     <Compile Include="RavenJobStore.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

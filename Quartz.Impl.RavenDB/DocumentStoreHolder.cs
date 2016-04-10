@@ -16,7 +16,9 @@ namespace Quartz.Impl.RavenDB
             {
                 Url = RavenJobStore.Url,
                 DefaultDatabase = RavenJobStore.DefaultDatabase
-            }.Initialize();
+            };
+            documentStore.RegisterListener(new ThreadPrinter());
+            documentStore.Initialize();
             documentStore.Conventions.DefaultQueryingConsistency = ConsistencyOptions.AlwaysWaitForNonStaleResultsAsOfLastWrite;
             return documentStore;
         }

@@ -32,14 +32,12 @@ namespace Tryouts
                 ["quartz.threadPool.type"] = "Quartz.Simpl.SimpleThreadPool, Quartz",
                 ["quartz.threadPool.threadCount"] = "1",
                 ["quartz.threadPool.threadPriority"] = "Normal",
-
+/*
                 ["quartz.jobStore.type"] = "Quartz.Impl.RavenDB.RavenJobStore, Quartz.Impl.RavenDB",
-                ["quartz.jobStore.misfireThreshold"] = "60000"
+                ["quartz.jobStore.misfireThreshold"] = "60000"*/
                
-                //["quartz.ravendb.connectionString"] = "Url=http://localhost:8080;DefaultDatabase=IftahDB",
-               
-                
-               /* ["quartz.jobStore.misfireThreshold"] = "60000",
+              
+                ["quartz.jobStore.misfireThreshold"] = "60000",
                 ["quartz.jobStore.type"] = "Quartz.Impl.AdoJobStore.JobStoreTX, Quartz",
                 ["quartz.jobStore.useProperties"] = "false",
                 ["quartz.jobStore.dataSource"] = "default",
@@ -47,7 +45,7 @@ namespace Tryouts
                 ["quartz.jobStore.lockHandler.type"] = "Quartz.Impl.AdoJobStore.UpdateLockRowSemaphore, Quartz",
                 ["quartz.jobStore.driverDelegateType"] = "Quartz.Impl.AdoJobStore.SqlServerDelegate, Quartz",
                 ["quartz.dataSource.default.connectionString"] = "Server=DESKTOP-2AM9NOM\\SQLEXPRESS;Database=IftahDB;Trusted_Connection=True;",
-                ["quartz.dataSource.default.provider"] = "SqlServer-20"*/
+                ["quartz.dataSource.default.provider"] = "SqlServer-20"
                 
             };
             
@@ -125,9 +123,9 @@ namespace Tryouts
                 //scheduler.ScheduleJob(job1, trigger1);
                 //scheduler.ScheduleJob(job1, trigger2);
 
-                scheduler.ScheduleJob(job2, trigger4);
 
                 scheduler.ScheduleJob(job1, triggerSet, true);
+                scheduler.ScheduleJob(job2, trigger4);
 
                 // some sleep to show what's happening
                 Thread.Sleep(TimeSpan.FromSeconds(600));
@@ -153,13 +151,11 @@ namespace Tryouts
         {
             int count;
             count = context.MergedJobDataMap["Count"] == null ? 1 : context.MergedJobDataMap.GetIntValue("Count");
-            //var count = (int?)context.MergedJobDataMap["Count"] ?? 1;
 
             Console.WriteLine("ExampleJob1 --> Trigger: {0} Count: {1}" ,context.Trigger.Key, count);
 
             context.JobDetail.JobDataMap.Put("Count", ++count);
-            
-        }
+                    }
     }
 
     [DisallowConcurrentExecution]
