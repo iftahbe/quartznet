@@ -15,11 +15,15 @@ namespace Quartz.Impl.RavenDB
             return new IndexDefinition
             {
                 Map = @"from doc in docs.Triggers
-                    select new {
-	                    CalendarName = doc.CalendarName,
-	                    JobGroup = doc.JobGroup,
-	                    JobName = doc.JobName
-                    }"
+                        select new {
+	                        JobName = doc.JobName,
+                            Group = doc.Group,
+                            MisfireInstruction = doc.MisfireInstruction,
+                            NextFireTimeTicks = doc.NextFireTimeTicks,
+                            NextFireTimeUtc = doc.NextFireTimeUtc,
+                            Priority = doc.Priority,
+                            State = doc.State
+                        }"
             };
         }
     }

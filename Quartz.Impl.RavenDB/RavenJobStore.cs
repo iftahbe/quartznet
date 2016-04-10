@@ -5,7 +5,11 @@ using System.Linq;
 using System.Threading;
 using System.Configuration;
 using System.Data.Common;
+using System.Runtime.Remoting.Messaging;
+
 using Common.Logging;
+
+using Quartz.Collection;
 using Quartz.Impl.Matchers;
 using Quartz.Spi;
 
@@ -767,7 +771,7 @@ namespace Quartz.Impl.RavenDB
         /// </remarks>
         public Collection.ISet<string> PauseTriggers(GroupMatcher<TriggerKey> matcher)
         {
-            var pausedGroups = new HashSet<string>();
+            var pausedGroups = new System.Collections.Generic.HashSet<string>();
 
             var triggerKeysForMatchedGroup = GetTriggerKeys(matcher);
             foreach (var triggerKey in triggerKeysForMatchedGroup)
@@ -1039,16 +1043,11 @@ namespace Quartz.Impl.RavenDB
             if (!trig.GetNextFireTimeUtc().HasValue)
             {
                 signaler.NotifySchedulerListenersFinalized(trig);
-
-                // Prepare database trigger with new state and calculated fire times
-                //trigger.State = InternalTriggerState.Complete;
-                //trigger.NextFireTimeUtc = trig.GetNextFireTimeUtc();
-                //trigger.PreviousFireTimeUtc = trig.GetPreviousFireTimeUtc();
-
-                StoreTrigger(trig, true);
-
+                trigger.UpdateFireTimes(trig);
+                trigger.State = InternalTriggerState.Complete;
+              
             }
-            else if (tnft.Equals(trigger.NextFireTimeUtc))
+            else if (tnft.Equals(trig.GetNextFireTimeUtc()))
             {
                 return false;
             }
@@ -1060,40 +1059,69 @@ namespace Quartz.Impl.RavenDB
         {
             List<IOperableTrigger> result = new List<IOperableTrigger>();
             Collection.ISet<JobKey> acquiredJobKeysForNoConcurrentExec = new Collection.HashSet<JobKey>();
-            
-            
+            DateTimeOffset? firstAcquiredTriggerFireTime = null;
+
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                var triggers = session.Query<Trigger>()
-                    .Where(t => (t.State == InternalTriggerState.Waiting) && (t.NextFireTimeUtc <= noLaterThan) &&
+                var triggersQuery = session.Query<Trigger>()
+                    .Where(t => (t.State == InternalTriggerState.Waiting) && (t.NextFireTimeUtc <= (noLaterThan + timeWindow).UtcDateTime) &&
                                 ((t.MisfireInstruction == -1) || ((t.MisfireInstruction != -1) && (t.NextFireTimeUtc >= MisfireTime))))
                     .OrderBy(t => t.NextFireTimeTicks)
-                    .ThenByDescending(t => t.Priority);
+                    .ThenByDescending(t => t.Priority)
+                    .ToList();
 
-                // return empty list if store has no such triggers.
-                if (triggers == null)
-                {
-                    return result;
-                }
+                TreeSet<Trigger> triggers = new TreeSet<Trigger>(new TriggerComparator());
+                triggers.AddAll(triggersQuery);
 
-                foreach (var trigger in triggers)
+                while (true)
                 {
-                    if (trigger.NextFireTimeUtc == null)
+                    // return empty list if store has no such triggers.
+                    if (!triggers.Any())
                     {
-                        continue;
+                        return result;
                     }
-                    if (ApplyMisfire(trigger))
-                    {
-                        continue;
-                    }
-                    if (trigger.NextFireTimeUtc > noLaterThan + timeWindow)
+                
+                    var candidateTrigger = triggers.First();
+                    if (candidateTrigger == null)
                     {
                         break;
                     }
+                    if (!triggers.Remove(candidateTrigger))
+                    {
+                        break;
+                    }
+                    if (candidateTrigger.NextFireTimeUtc == null)
+                    {
+                        continue;
+                    }
+
+                   /* if ((firstAcquiredTriggerFireTime != null) && 
+                        (candidateTrigger.NextFireTimeUtc.Value > firstAcquiredTriggerFireTime.Value + timeWindow))
+                    {
+                        break;
+                    }*/
+
+                    if (ApplyMisfire(candidateTrigger))
+                    {
+                        if (candidateTrigger.NextFireTimeUtc != null)
+                        {
+                            triggers.Add(candidateTrigger);
+                        }
+                        continue;
+                    }
+
+
+                    //var triggerToUpdate = session.Include<Trigger>(x=>x.JobKey).Load(candidateTrigger.Key);
+
+                    if (candidateTrigger.NextFireTimeUtc > noLaterThan + timeWindow)
+                    {
+                        break;
+                    }
+
                     // If trigger's job is set as @DisallowConcurrentExecution, and it has already been added to result, then
                     // put it back into the timeTriggers set and continue to search for next trigger.
-                    JobKey jobKey = new JobKey(trigger.JobName, trigger.Group);
-                    Job job = session.Load<Job>(trigger.JobKey);
+                    JobKey jobKey = new JobKey(candidateTrigger.JobName, candidateTrigger.Group);
+                    Job job = session.Load<Job>(candidateTrigger.JobKey);
 
                     if (job.ConcurrentExecutionDisallowed)
                     {
@@ -1104,12 +1132,15 @@ namespace Quartz.Impl.RavenDB
                         acquiredJobKeysForNoConcurrentExec.Add(jobKey);
                     }
 
-                    trigger.State = InternalTriggerState.Acquired;
-                    trigger.FireInstanceId = GetFiredTriggerRecordId();
+                    candidateTrigger.State = InternalTriggerState.Acquired;
+                    candidateTrigger.FireInstanceId = GetFiredTriggerRecordId();
 
-                    session.Store(trigger, trigger.Key);
+                    result.Add(candidateTrigger.Deserialize());
 
-                    result.Add(trigger.Deserialize());
+                    if (firstAcquiredTriggerFireTime == null)
+                    {
+                        firstAcquiredTriggerFireTime = candidateTrigger.NextFireTimeUtc;
+                    }
 
                     if (result.Count == maxCount)
                     {
@@ -1118,7 +1149,6 @@ namespace Quartz.Impl.RavenDB
                 }
                 session.SaveChanges();
             }
-            
             //Log.Info("AcquireNextTriggers, Result:\n");
             //result.ForEach(i => Console.Write("{0}\n", i.Key));
             return result;
