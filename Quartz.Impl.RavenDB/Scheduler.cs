@@ -11,9 +11,7 @@ namespace Quartz.Impl.RavenDB
         public DateTimeOffset CheckinInterval { get; set; }
         public string State { get; set; }
         public Dictionary<string, ICalendar> Calendars { get; set; }
-        public Collection.HashSet<string> Locks { get; set; }
         public Collection.HashSet<string> PausedJobGroups { get; set; }
-        public Collection.HashSet<string> PausedTriggerGroups { get; set; }
         public Collection.HashSet<string> BlockedJobs { get; set; }
     }
 }  

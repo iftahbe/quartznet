@@ -113,9 +113,7 @@ namespace Quartz.Impl.RavenDB
                 LastCheckinTime = DateTimeOffset.MinValue,
                 CheckinInterval = DateTimeOffset.MinValue,
                 Calendars = new Dictionary<string, ICalendar>(),
-                Locks = new Collection.HashSet<string>(),
                 PausedJobGroups = new Collection.HashSet<string>(),
-                PausedTriggerGroups = new Collection.HashSet<string>(),
                 BlockedJobs = new Collection.HashSet<string>()
             };
 
@@ -254,11 +252,8 @@ namespace Quartz.Impl.RavenDB
 
         public bool IsTriggerGroupPaused(string groupName)
         {
-            using (var session = DocumentStoreHolder.Store.OpenSession())
-            {
-                var sched = session.Load<Scheduler>(InstanceName);
-                return sched.PausedTriggerGroups.Contains(groupName);
-            }
+            return GetPausedTriggerGroups().Contains(groupName);
+
         }
 
         public void StoreJob(IJobDetail newJob, bool replaceExisting)
@@ -374,6 +369,7 @@ namespace Quartz.Impl.RavenDB
 
             var trigger = new Trigger(newTrigger, InstanceName);
 
+            // make sure trigger group is not paused and that job is not blocked
             if (GetPausedTriggerGroups().Contains(newTrigger.Key.Group) || GetPausedJobGroups().Contains(newTrigger.JobKey.Group))
             {
                 trigger.State = InternalTriggerState.Paused;
@@ -617,43 +613,49 @@ namespace Quartz.Impl.RavenDB
         {
             StringOperator op = matcher.CompareWithOperator;
             string compareToValue = matcher.CompareToValue;
-            Collection.ISet<JobKey> result = new Collection.HashSet<JobKey>();
 
-            if (op.Equals(StringOperator.Equality))
+            var result = new Collection.HashSet<JobKey>();
+
+            using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                List<Job> jobs;
-                using (var session = DocumentStoreHolder.Store.OpenSession())
+                var allJobs = session.Query<Job>();
+
+                foreach (var job in allJobs)
                 {
-                    jobs = session
-                        .Query<Job>()
-                        .Where(j => j.Group == compareToValue)
-                        .ToList();
+                    if (op.Evaluate(job.Group, compareToValue))
+                    {
+                        result.Add(new JobKey(job.Name, job.Group));
+                    }
                 }
-                foreach (var job in jobs)
-                {
-                    result.Add(new JobKey(job.Name, job.Group));
-                }
-                return result;
             }
-            else
-            {
-                throw new NotImplementedException();
-            }
+            return result;
         }
 
+        /// <summary>
+        /// Get the names of all of the <see cref="ITrigger" />s
+        /// that have the given group name.
+        /// <para>
+        /// If there are no triggers in the given group name, the result should be a
+        /// zero-length array (not <see langword="null" />).
+        /// </para>
+        /// </summary>
         public Collection.ISet<TriggerKey> GetTriggerKeys(GroupMatcher<TriggerKey> matcher)
         {
             StringOperator op = matcher.CompareWithOperator;
             string compareToValue = matcher.CompareToValue;
 
-            Collection.HashSet<TriggerKey> result = new Collection.HashSet<TriggerKey>();
+            var result = new Collection.HashSet<TriggerKey>();
+
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                var triggers = session.Query<Trigger>().Where(t => op.Evaluate(t.Group, compareToValue));
-
-                foreach (var trigger in triggers)
+                var allTriggers = session.Query<Trigger>();
+                 
+                foreach (var trigger in allTriggers)
                 {
-                    result.Add(new TriggerKey(trigger.Name, trigger.Group));
+                    if (op.Evaluate(trigger.Group, compareToValue))
+                    {
+                        result.Add(new TriggerKey(trigger.Name, trigger.Group));
+                    }
                 }
             }
             return result;
@@ -754,39 +756,26 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        /// <summary>
+        /// Pause all of the <see cref="ITrigger" />s in the
+        /// given group.
+        /// </summary>
+        /// <remarks>
+        /// The JobStore should "remember" that the group is paused, and impose the
+        /// pause on any new triggers that are added to the group while the group is
+        /// paused.
+        /// </remarks>
         public Collection.ISet<string> PauseTriggers(GroupMatcher<TriggerKey> matcher)
         {
-            StringOperator op = matcher.CompareWithOperator;
-            string compareToValue = matcher.CompareToValue;
+            var pausedGroups = new HashSet<string>();
 
-            if (op.Equals(StringOperator.Equality))
+            var triggerKeysForMatchedGroup = GetTriggerKeys(matcher);
+            foreach (var triggerKey in triggerKeysForMatchedGroup)
             {
-                Collection.ISet<string> pausedGroupsSet;
-                using (var session = DocumentStoreHolder.Store.OpenSession())
-                {
-                    pausedGroupsSet = (Collection.ISet<string>) session
-                        .Query<Trigger>()
-                        .Where(t => t.Group == compareToValue)
-                        .Select(t => t.Group)
-                        .ToHashSet();
-                }
-
-                foreach (string pausedGroup in pausedGroupsSet)
-                {
-                    Collection.ISet<TriggerKey> keys = GetTriggerKeys(GroupMatcher<TriggerKey>.GroupEquals(pausedGroup));
-
-                    foreach (TriggerKey key in keys)
-                    {
-                        PauseTrigger(key);
-                    }
-                }
-
-                return pausedGroupsSet;
+                PauseTrigger(triggerKey);
+                pausedGroups.Add(triggerKey.Group);
             }
-            else
-            {
-                throw new NotImplementedException();
-            }
+            return new Collection.HashSet<string>(pausedGroups);
         }
 
         public void PauseJob(JobKey jobKey)
@@ -800,43 +789,37 @@ namespace Quartz.Impl.RavenDB
 
         public IList<string> PauseJobs(GroupMatcher<JobKey> matcher)
         {
-            StringOperator op = matcher.CompareWithOperator;
-            string compareToValue = matcher.CompareToValue;
-            List<string> pausedGroups = new List<String>();
 
-            if (op.Equals(StringOperator.Equality))
+            var pausedGroups = new List<string>();
+
+            var jobKeysForMatchedGroup = GetJobKeys(matcher);
+            foreach (var jobKey in jobKeysForMatchedGroup)
             {
+                PauseJob(jobKey);
+                pausedGroups.Add(jobKey.Group);
+
                 using (var session = DocumentStoreHolder.Store.OpenSession())
                 {
                     var sched = session.Load<Scheduler>(InstanceName);
-
-                    if (sched.PausedJobGroups.Add(matcher.CompareToValue))
-                    {
-                        pausedGroups.Add(matcher.CompareToValue);
-                    }
+                    sched.PausedJobGroups.Add(matcher.CompareToValue);
                     session.SaveChanges();
-                }
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
-
-            foreach (string groupName in pausedGroups)
-            {
-                foreach (JobKey jobKey in GetJobKeys(GroupMatcher<JobKey>.GroupEquals(groupName)))
-                {
-                    IList<IOperableTrigger> triggers = GetTriggersForJob(jobKey);
-                    foreach (IOperableTrigger trigger in triggers)
-                    {
-                        PauseTrigger(trigger.Key);
-                    }
                 }
             }
 
             return pausedGroups;
         }
 
+        /// <summary>
+        /// Resume (un-pause) the <see cref="ITrigger" /> with the
+        /// given key.
+        /// 
+        /// <para>
+        /// If the <see cref="ITrigger" /> missed one or more fire-times, then the
+        /// <see cref="ITrigger" />'s misfire instruction will be applied.
+        /// </para>
+        /// </summary>
+        /// <seealso cref="string">
+        /// </seealso>
         public void ResumeTrigger(TriggerKey triggerKey)
         {
             if (!CheckExists(triggerKey))
@@ -871,44 +854,29 @@ namespace Quartz.Impl.RavenDB
 
         public IList<string> ResumeTriggers(GroupMatcher<TriggerKey> matcher)
         {
-            Collection.ISet<string> groups = new Collection.HashSet<string>();
-
+            Collection.ISet<string> resumedGroups = new Collection.HashSet<string>();
             Collection.ISet<TriggerKey> keys = GetTriggerKeys(matcher);
 
             foreach (TriggerKey triggerKey in keys)
-            {
-                groups.Add(triggerKey.Group);
-                var trigger = RetrieveTrigger(triggerKey);
-
-                if (trigger != null)
-                {
-                    var jobGroup = trigger.JobKey.Group;
-                    if (GetPausedJobGroups().Contains(jobGroup))
-                    {
-                        continue;
-                    }
-                }
+            {                
                 ResumeTrigger(triggerKey);
-            }
-            foreach (var group in groups)
-            {
-                using (var session = DocumentStoreHolder.Store.OpenSession())
-                {
-                    var sched = session.Load<Scheduler>(InstanceName);
-                    sched.PausedTriggerGroups.Remove(group);
-                    session.SaveChanges();
-                }
+                resumedGroups.Add(triggerKey.Group);
             }
 
-            return new List<string>(groups);
+            return new List<string>(resumedGroups);
         }
 
         public Collection.ISet<string> GetPausedTriggerGroups()
         {
-
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                return session.Load<Scheduler>(InstanceName).PausedTriggerGroups;
+                return new Collection.HashSet<string>(
+                    session.Query<Trigger>()
+                        .Where(t => t.State == InternalTriggerState.Paused || t.State == InternalTriggerState.PausedAndBlocked)
+                        .Distinct()
+                        .Select(t => t.Group)
+                        .ToHashSet()
+                );
             }
         }
 
