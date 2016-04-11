@@ -71,6 +71,7 @@ namespace Quartz.Impl.AdoJobStore
 
         public IDbCommand PrepareCommand(ConnectionAndTransactionHolder cth, string commandText)
         {
+            Console.WriteLine(commandText);
             IDbCommand cmd = dbProvider.CreateCommand();
             cmd.CommandText = commandText;
             cmd.Connection = cth.Connection;

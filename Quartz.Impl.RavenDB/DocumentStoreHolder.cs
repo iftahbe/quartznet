@@ -17,7 +17,10 @@ namespace Quartz.Impl.RavenDB
                 Url = RavenJobStore.Url,
                 DefaultDatabase = RavenJobStore.DefaultDatabase
             };
-            documentStore.RegisterListener(new ThreadPrinter());
+
+            // For multithreaded debugging need to uncomment next line (prints thread id and stack trace)
+            //documentStore.RegisterListener(new ThreadPrinter());
+
             documentStore.Initialize();
             documentStore.Conventions.DefaultQueryingConsistency = ConsistencyOptions.AlwaysWaitForNonStaleResultsAsOfLastWrite;
             return documentStore;

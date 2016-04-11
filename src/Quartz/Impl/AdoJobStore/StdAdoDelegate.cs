@@ -1376,6 +1376,7 @@ namespace Quartz.Impl.AdoJobStore
         public virtual int UpdateTriggerStatesForJobFromOtherState(ConnectionAndTransactionHolder conn, JobKey jobKey,
                                                                    string state, string oldState)
         {
+
             using (IDbCommand cmd = PrepareCommand(conn, ReplaceTablePrefix(SqlUpdateJobTriggerStatesFromOtherState)))
             {
                 AddCommandParameter(cmd, "state", state);

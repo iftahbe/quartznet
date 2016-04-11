@@ -32,10 +32,10 @@ namespace Tryouts
                 ["quartz.threadPool.type"] = "Quartz.Simpl.SimpleThreadPool, Quartz",
                 ["quartz.threadPool.threadCount"] = "1",
                 ["quartz.threadPool.threadPriority"] = "Normal",
-/*
+
                 ["quartz.jobStore.type"] = "Quartz.Impl.RavenDB.RavenJobStore, Quartz.Impl.RavenDB",
-                ["quartz.jobStore.misfireThreshold"] = "60000"*/
-               
+                ["quartz.jobStore.misfireThreshold"] = "60000"
+   /*            
               
                 ["quartz.jobStore.misfireThreshold"] = "60000",
                 ["quartz.jobStore.type"] = "Quartz.Impl.AdoJobStore.JobStoreTX, Quartz",
@@ -45,7 +45,7 @@ namespace Tryouts
                 ["quartz.jobStore.lockHandler.type"] = "Quartz.Impl.AdoJobStore.UpdateLockRowSemaphore, Quartz",
                 ["quartz.jobStore.driverDelegateType"] = "Quartz.Impl.AdoJobStore.SqlServerDelegate, Quartz",
                 ["quartz.dataSource.default.connectionString"] = "Server=DESKTOP-2AM9NOM\\SQLEXPRESS;Database=IftahDB;Trusted_Connection=True;",
-                ["quartz.dataSource.default.provider"] = "SqlServer-20"
+                ["quartz.dataSource.default.provider"] = "SqlServer-20"*/
                 
             };
             
@@ -120,12 +120,17 @@ namespace Tryouts
                     trigger3
                 };
 
+                Quartz.Collection.ISet<ITrigger> triggerSet2 = new Quartz.Collection.HashSet<ITrigger>()
+                {
+                    trigger4
+                };
+
                 //scheduler.ScheduleJob(job1, trigger1);
                 //scheduler.ScheduleJob(job1, trigger2);
 
 
                 scheduler.ScheduleJob(job1, triggerSet, true);
-                scheduler.ScheduleJob(job2, trigger4);
+                scheduler.ScheduleJob(job2, triggerSet2, true);
 
                 // some sleep to show what's happening
                 Thread.Sleep(TimeSpan.FromSeconds(600));

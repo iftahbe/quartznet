@@ -20,6 +20,7 @@
 #endregion
 
 using System;
+using System.Diagnostics;
 using System.Threading;
 
 using Common.Logging;
@@ -121,6 +122,11 @@ namespace Quartz.Impl.AdoJobStore
         /// <returns>true if the lock was obtained.</returns>
         public bool ObtainLock(DbMetadata metadata, ConnectionAndTransactionHolder conn, string lockName)
         {
+            StackTrace st = new StackTrace();
+            StackFrame sf = st.GetFrame(0);
+            Console.WriteLine(sf.GetMethod() + ": [" + lockName + "]");
+            //Console.WriteLine("Stack trace:" + Environment.StackTrace);
+
             if (Log.IsDebugEnabled)
             {
                 Log.DebugFormat("Lock '{0}' is desired by: {1}", lockName, Thread.CurrentThread.Name);
@@ -153,6 +159,11 @@ namespace Quartz.Impl.AdoJobStore
         /// <param name="lockName"></param>
         public void ReleaseLock(string lockName)
         {
+            StackTrace st = new StackTrace();
+            StackFrame sf = st.GetFrame(0);
+            Console.WriteLine(sf.GetMethod() + ": [" + lockName + "]");
+            Console.WriteLine("Stack trace:" + Environment.StackTrace);
+
             if (IsLockOwner(lockName))
             {
                 if (Log.IsDebugEnabled)

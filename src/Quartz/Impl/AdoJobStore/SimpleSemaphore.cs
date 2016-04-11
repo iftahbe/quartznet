@@ -18,7 +18,9 @@
 #endregion
 
 using System;
+using System.Diagnostics;
 using System.Globalization;
+using System.Reflection;
 using System.Threading;
 
 using Common.Logging;
@@ -75,7 +77,11 @@ namespace Quartz.Impl.AdoJobStore
 		/// <returns>True if the lock was obtained.</returns>
 		public virtual bool ObtainLock(DbMetadata metadata, ConnectionAndTransactionHolder conn, string lockName)
 		{
-			lock (this)
+            StackTrace st = new StackTrace();
+            StackFrame sf = st.GetFrame(0);
+            Console.WriteLine(sf.GetMethod() + ": [" + lockName + "]");
+
+            lock (this)
 			{
 				lockName = String.Intern(lockName);
 
@@ -125,7 +131,10 @@ namespace Quartz.Impl.AdoJobStore
 		/// </summary>
 		public virtual void ReleaseLock(string lockName)
 		{
-			lock (this)
+            StackTrace st = new StackTrace();
+            StackFrame sf = st.GetFrame(0);
+            Console.WriteLine(sf.GetMethod() + ": [" + lockName + "]");
+            lock (this)
 			{
 				lockName = String.Intern(lockName);
 

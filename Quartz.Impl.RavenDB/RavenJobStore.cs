@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Configuration;
 using System.Data.Common;
+using System.Runtime.CompilerServices;
 using System.Runtime.Remoting.Messaging;
 
 using Common.Logging;
@@ -26,7 +27,6 @@ namespace Quartz.Impl.RavenDB
 {
     public class RavenJobStore : IJobStore
     {
-        private readonly object lockObject = new object();
         private TimeSpan misfireThreshold = TimeSpan.FromSeconds(5);
         private ISchedulerSignaler signaler;
         private static long ftrCtr = SystemTime.UtcNow().Ticks;
@@ -70,16 +70,18 @@ namespace Quartz.Impl.RavenDB
             InstanceName = "UnitTestScheduler";
             InstanceId = "instance_two";
 
-            
+
             new TriggerIndex().Execute(DocumentStoreHolder.Store);
             new JobIndex().Execute(DocumentStoreHolder.Store);
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void Initialize(ITypeLoadHelper loadHelper, ISchedulerSignaler s)
         {
             signaler = s;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void SetSchedulerState(string state)
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -90,6 +92,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void SchedulerStarted()
         {
             var cmds = DocumentStoreHolder.Store.DatabaseCommands;
@@ -132,16 +135,19 @@ namespace Quartz.Impl.RavenDB
             SetSchedulerState("Started");
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void SchedulerPaused()
         {
             SetSchedulerState("Paused");
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void SchedulerResumed()
         {
             SetSchedulerState("Resumed");
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void Shutdown()
         {
             SetSchedulerState("Shutdown");
@@ -152,6 +158,7 @@ namespace Quartz.Impl.RavenDB
         /// appropriate.
         /// </summary>
         /// <exception cref="JobPersistenceException">Condition.</exception>
+        [MethodImpl(MethodImplOptions.Synchronized)]
         protected virtual void RecoverSchedulerData()
         {
             try
@@ -172,10 +179,6 @@ namespace Quartz.Impl.RavenDB
                 }
 
                 Log.Info("Freed triggers from 'acquired' / 'blocked' state.");
-
-                // clean up misfired jobs
-                //RecoverMisfiredJobs(true);
-
                 // recover jobs marked for recovery that were not fully executed
                 IList<IOperableTrigger> recoveringJobTriggers = new List<IOperableTrigger>();
 
@@ -198,7 +201,7 @@ namespace Quartz.Impl.RavenDB
                     if (CheckExists(trigger.JobKey))
                     {
                         trigger.ComputeFirstFireTimeUtc(null);
-                        StoreTrigger(trigger,true);
+                        StoreTrigger(trigger, true);
                     }
                 }
                 Log.Info("Recovery complete.");
@@ -233,18 +236,21 @@ namespace Quartz.Impl.RavenDB
         /// Gets the fired trigger record id.
         /// </summary>
         /// <returns>The fired trigger record id.</returns>
+        [MethodImpl(MethodImplOptions.Synchronized)]
         protected virtual string GetFiredTriggerRecordId()
         {
             var value = Interlocked.Increment(ref ftrCtr);
             return Convert.ToString(value, CultureInfo.InvariantCulture);
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void StoreJobAndTrigger(IJobDetail newJob, IOperableTrigger newTrigger)
         {
             StoreJob(newJob, true);
             StoreTrigger(newTrigger, true);
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public bool IsJobGroupPaused(string groupName)
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -254,12 +260,14 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public bool IsTriggerGroupPaused(string groupName)
         {
             return GetPausedTriggerGroups().Contains(groupName);
 
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void StoreJob(IJobDetail newJob, bool replaceExisting)
         {
             if (CheckExists(newJob.Key))
@@ -280,6 +288,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void StoreJobsAndTriggers(IDictionary<IJobDetail, Collection.ISet<ITrigger>> triggersAndJobs, bool replace)
         {
             using (var bulkInsert = DocumentStoreHolder.Store.BulkInsert(options: new BulkInsertOptions() { OverwriteExisting = replace }))
@@ -317,6 +326,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public bool RemoveJob(JobKey jobKey)
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -335,6 +345,7 @@ namespace Quartz.Impl.RavenDB
             return true;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public bool RemoveJobs(IList<JobKey> jobKeys)
         {
             // Returns false in case at least one job removal fails
@@ -346,6 +357,7 @@ namespace Quartz.Impl.RavenDB
             return result;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public IJobDetail RetrieveJob(JobKey jobKey)
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -356,6 +368,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void StoreTrigger(IOperableTrigger newTrigger, bool replaceExisting)
         {
             if (CheckExists(newTrigger.Key))
@@ -395,6 +408,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public bool RemoveTrigger(TriggerKey triggerKey)
         {
             if (!CheckExists(triggerKey))
@@ -406,7 +420,7 @@ namespace Quartz.Impl.RavenDB
                 var trigger = session.Load<Trigger>(triggerKey.Name + "/" + triggerKey.Group);
                 var job = RetrieveJob(new JobKey(trigger.JobName, trigger.Group));
                 var trigList = GetTriggersForJob(job.Key);
-                
+
                 // Remove the trigger's job if it is not associated with any other triggers
                 if ((trigList == null || trigList.Count == 0) && !job.Durable)
                 {
@@ -419,6 +433,7 @@ namespace Quartz.Impl.RavenDB
             return true;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public bool RemoveTriggers(IList<TriggerKey> triggerKeys)
         {
             // Returns false in case at least one trigger removal fails
@@ -430,6 +445,7 @@ namespace Quartz.Impl.RavenDB
             return result;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public bool ReplaceTrigger(TriggerKey triggerKey, IOperableTrigger newTrigger)
         {
             if (!CheckExists(triggerKey))
@@ -444,6 +460,7 @@ namespace Quartz.Impl.RavenDB
             return wasRemoved;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public IOperableTrigger RetrieveTrigger(TriggerKey triggerKey)
         {
             // this check might not be necessary 
@@ -460,6 +477,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public bool CalendarExists(string calName)
         {
             bool answer;
@@ -480,6 +498,7 @@ namespace Quartz.Impl.RavenDB
             return answer;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public bool CheckExists(JobKey jobKey)
         {
             var cmds = DocumentStoreHolder.Store.DatabaseCommands;
@@ -487,6 +506,7 @@ namespace Quartz.Impl.RavenDB
             return docMetaData != null;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public bool CheckExists(TriggerKey triggerKey)
         {
             var cmds = DocumentStoreHolder.Store.DatabaseCommands;
@@ -494,16 +514,18 @@ namespace Quartz.Impl.RavenDB
             return docMetaData != null;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void ClearAllSchedulingData()
         {
-            var op = DocumentStoreHolder.Store.DatabaseCommands.DeleteByIndex("Raven/DocumentsByEntityName", new IndexQuery(), new BulkOperationOptions() {AllowStale = true});
+            var op = DocumentStoreHolder.Store.DatabaseCommands.DeleteByIndex("Raven/DocumentsByEntityName", new IndexQuery(), new BulkOperationOptions() { AllowStale = true });
             op.WaitForCompletion();
         }
 
         /// <exception cref="ObjectAlreadyExistsException">Condition.</exception>
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void StoreCalendar(string name, ICalendar calendar, bool replaceExisting, bool updateTriggers)
         {
-            var calendarCopy = (ICalendar) calendar.Clone();
+            var calendarCopy = (ICalendar)calendar.Clone();
 
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
@@ -545,12 +567,13 @@ namespace Quartz.Impl.RavenDB
                     var trigger = triggerToUpdate.Deserialize();
                     trigger.UpdateWithNewCalendar(calendarCopy, misfireThreshold);
                     triggerToUpdate.UpdateFireTimes(trigger);
-               
+
                 }
                 session.SaveChanges();
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public bool RemoveCalendar(string calName)
         {
             if (RetrieveCalendar(calName) == null)
@@ -569,12 +592,14 @@ namespace Quartz.Impl.RavenDB
             return true;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public ICalendar RetrieveCalendar(string calName)
         {
             var callCollection = RetrieveCalendarCollection();
             return callCollection.ContainsKey(calName) ? callCollection[calName] : null;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public Dictionary<string, ICalendar> RetrieveCalendarCollection()
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -592,6 +617,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public int GetNumberOfJobs()
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -600,6 +626,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public int GetNumberOfTriggers()
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -608,11 +635,13 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public int GetNumberOfCalendars()
         {
             return RetrieveCalendarCollection().Count;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public Collection.ISet<JobKey> GetJobKeys(GroupMatcher<JobKey> matcher)
         {
             StringOperator op = matcher.CompareWithOperator;
@@ -643,6 +672,7 @@ namespace Quartz.Impl.RavenDB
         /// zero-length array (not <see langword="null" />).
         /// </para>
         /// </summary>
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public Collection.ISet<TriggerKey> GetTriggerKeys(GroupMatcher<TriggerKey> matcher)
         {
             StringOperator op = matcher.CompareWithOperator;
@@ -653,7 +683,7 @@ namespace Quartz.Impl.RavenDB
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
                 var allTriggers = session.Query<Trigger>();
-                 
+
                 foreach (var trigger in allTriggers)
                 {
                     if (op.Evaluate(trigger.Group, compareToValue))
@@ -665,6 +695,7 @@ namespace Quartz.Impl.RavenDB
             return result;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public IList<string> GetJobGroupNames()
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -676,6 +707,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public IList<string> GetTriggerGroupNames()
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -687,11 +719,13 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public IList<string> GetCalendarNames()
         {
             return RetrieveCalendarCollection().Keys.ToList();
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public IList<IOperableTrigger> GetTriggersForJob(JobKey jobKey)
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -704,6 +738,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public TriggerState GetTriggerState(TriggerKey triggerKey)
         {
             Trigger trigger;
@@ -734,6 +769,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void PauseTrigger(TriggerKey triggerKey)
         {
             if (!CheckExists(triggerKey))
@@ -769,6 +805,7 @@ namespace Quartz.Impl.RavenDB
         /// pause on any new triggers that are added to the group while the group is
         /// paused.
         /// </remarks>
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public Collection.ISet<string> PauseTriggers(GroupMatcher<TriggerKey> matcher)
         {
             var pausedGroups = new System.Collections.Generic.HashSet<string>();
@@ -782,6 +819,7 @@ namespace Quartz.Impl.RavenDB
             return new Collection.HashSet<string>(pausedGroups);
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void PauseJob(JobKey jobKey)
         {
             IList<IOperableTrigger> triggersForJob = GetTriggersForJob(jobKey);
@@ -791,6 +829,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public IList<string> PauseJobs(GroupMatcher<JobKey> matcher)
         {
 
@@ -824,6 +863,7 @@ namespace Quartz.Impl.RavenDB
         /// </summary>
         /// <seealso cref="string">
         /// </seealso>
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void ResumeTrigger(TriggerKey triggerKey)
         {
             if (!CheckExists(triggerKey))
@@ -851,18 +891,19 @@ namespace Quartz.Impl.RavenDB
                 }
 
                 ApplyMisfire(trigger);
-                
+
                 session.SaveChanges();
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public IList<string> ResumeTriggers(GroupMatcher<TriggerKey> matcher)
         {
             Collection.ISet<string> resumedGroups = new Collection.HashSet<string>();
             Collection.ISet<TriggerKey> keys = GetTriggerKeys(matcher);
 
             foreach (TriggerKey triggerKey in keys)
-            {                
+            {
                 ResumeTrigger(triggerKey);
                 resumedGroups.Add(triggerKey.Group);
             }
@@ -870,6 +911,7 @@ namespace Quartz.Impl.RavenDB
             return new List<string>(resumedGroups);
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public Collection.ISet<string> GetPausedTriggerGroups()
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -884,6 +926,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public Collection.ISet<string> GetPausedJobGroups()
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -892,6 +935,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public Collection.ISet<string> GetBlockedJobs()
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -900,6 +944,7 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void ResumeJob(JobKey jobKey)
         {
             IList<IOperableTrigger> triggersForJob = GetTriggersForJob(jobKey);
@@ -918,6 +963,7 @@ namespace Quartz.Impl.RavenDB
         /// misfire instruction will be applied.
         /// </para> 
         /// </summary>
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public Collection.ISet<string> ResumeJobs(GroupMatcher<JobKey> matcher)
         {
             Collection.ISet<string> resumedGroups = new Collection.HashSet<string>();
@@ -964,6 +1010,7 @@ namespace Quartz.Impl.RavenDB
         /// </para>
         /// </summary>
         /// <seealso cref="ResumeAll" />
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void PauseAll()
         {
             IList<string> triggerGroupNames = GetTriggerGroupNames();
@@ -984,6 +1031,7 @@ namespace Quartz.Impl.RavenDB
         /// 
         /// </summary>
         /// <seealso cref="PauseAll" />
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void ResumeAll()
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -1003,6 +1051,7 @@ namespace Quartz.Impl.RavenDB
 
         protected virtual DateTimeOffset MisfireTime
         {
+            [MethodImpl(MethodImplOptions.Synchronized)]
             get
             {
                 DateTimeOffset misfireTime = SystemTime.UtcNow();
@@ -1020,6 +1069,7 @@ namespace Quartz.Impl.RavenDB
         /// </summary>
         /// <param name="tw">The trigger wrapper.</param>
         /// <returns></returns>
+        [MethodImpl(MethodImplOptions.Synchronized)]
         protected virtual bool ApplyMisfire(Trigger trigger)
         {
             DateTimeOffset? tnft = trigger.NextFireTimeUtc;
@@ -1045,7 +1095,7 @@ namespace Quartz.Impl.RavenDB
                 signaler.NotifySchedulerListenersFinalized(trig);
                 trigger.UpdateFireTimes(trig);
                 trigger.State = InternalTriggerState.Complete;
-              
+
             }
             else if (tnft.Equals(trig.GetNextFireTimeUtc()))
             {
@@ -1055,102 +1105,100 @@ namespace Quartz.Impl.RavenDB
             return true;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public virtual IList<IOperableTrigger> AcquireNextTriggers(DateTimeOffset noLaterThan, int maxCount, TimeSpan timeWindow)
         {
-            lock (lockObject)
+            List<IOperableTrigger> result = new List<IOperableTrigger>();
+            Collection.ISet<JobKey> acquiredJobKeysForNoConcurrentExec = new Collection.HashSet<JobKey>();
+            DateTimeOffset? firstAcquiredTriggerFireTime = null;
+
+            using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                List<IOperableTrigger> result = new List<IOperableTrigger>();
-                Collection.ISet<JobKey> acquiredJobKeysForNoConcurrentExec = new Collection.HashSet<JobKey>();
-                DateTimeOffset? firstAcquiredTriggerFireTime = null;
+                var triggersQuery = session.Query<Trigger>()
+                    .Where(t => (t.State == InternalTriggerState.Waiting) && (t.NextFireTimeUtc <= (noLaterThan + timeWindow).UtcDateTime) &&
+                                ((t.MisfireInstruction == -1) || ((t.MisfireInstruction != -1) && (t.NextFireTimeUtc >= MisfireTime))))
+                    .OrderBy(t => t.NextFireTimeTicks)
+                    .ThenByDescending(t => t.Priority)
+                    .ToList();
 
-                using (var session = DocumentStoreHolder.Store.OpenSession())
+                TreeSet<Trigger> triggers = new TreeSet<Trigger>(new TriggerComparator());
+                triggers.AddAll(triggersQuery);
+
+                while (true)
                 {
-                    var triggersQuery = session.Query<Trigger>()
-                        .Where(t => (t.State == InternalTriggerState.Waiting) && (t.NextFireTimeUtc <= (noLaterThan + timeWindow).UtcDateTime) &&
-                                    ((t.MisfireInstruction == -1) || ((t.MisfireInstruction != -1) && (t.NextFireTimeUtc >= MisfireTime))))
-                        .OrderBy(t => t.NextFireTimeTicks)
-                        .ThenByDescending(t => t.Priority)
-                        .ToList();
-
-                    TreeSet<Trigger> triggers = new TreeSet<Trigger>(new TriggerComparator());
-                    triggers.AddAll(triggersQuery);
-
-                    while (true)
+                    // return empty list if store has no such triggers.
+                    if (!triggers.Any())
                     {
-                        // return empty list if store has no such triggers.
-                        if (!triggers.Any())
-                        {
-                            return result;
-                        }
-
-                        var candidateTrigger = triggers.First();
-                        if (candidateTrigger == null)
-                        {
-                            break;
-                        }
-                        if (!triggers.Remove(candidateTrigger))
-                        {
-                            break;
-                        }
-                        if (candidateTrigger.NextFireTimeUtc == null)
-                        {
-                            continue;
-                        }
-
-                        if (ApplyMisfire(candidateTrigger))
-                        {
-                            if (candidateTrigger.NextFireTimeUtc != null)
-                            {
-                                triggers.Add(candidateTrigger);
-                            }
-                            continue;
-                        }
-
-
-                        //var triggerToUpdate = session.Include<Trigger>(x=>x.JobKey).Load(candidateTrigger.Key);
-
-                        if (candidateTrigger.NextFireTimeUtc > noLaterThan + timeWindow)
-                        {
-                            break;
-                        }
-
-                        // If trigger's job is set as @DisallowConcurrentExecution, and it has already been added to result, then
-                        // put it back into the timeTriggers set and continue to search for next trigger.
-                        JobKey jobKey = new JobKey(candidateTrigger.JobName, candidateTrigger.Group);
-                        Job job = session.Load<Job>(candidateTrigger.JobKey);
-
-                        if (job.ConcurrentExecutionDisallowed)
-                        {
-                            if (acquiredJobKeysForNoConcurrentExec.Contains(jobKey))
-                            {
-                                continue; // go to next trigger in store.
-                            }
-                            acquiredJobKeysForNoConcurrentExec.Add(jobKey);
-                        }
-
-                        candidateTrigger.State = InternalTriggerState.Acquired;
-                        candidateTrigger.FireInstanceId = GetFiredTriggerRecordId();
-
-                        result.Add(candidateTrigger.Deserialize());
-
-                        if (firstAcquiredTriggerFireTime == null)
-                        {
-                            firstAcquiredTriggerFireTime = candidateTrigger.NextFireTimeUtc;
-                        }
-
-                        if (result.Count == maxCount)
-                        {
-                            break;
-                        }
+                        return result;
                     }
-                    session.SaveChanges();
+
+                    var candidateTrigger = triggers.First();
+                    if (candidateTrigger == null)
+                    {
+                        break;
+                    }
+                    if (!triggers.Remove(candidateTrigger))
+                    {
+                        break;
+                    }
+                    if (candidateTrigger.NextFireTimeUtc == null)
+                    {
+                        continue;
+                    }
+
+                    if (ApplyMisfire(candidateTrigger))
+                    {
+                        if (candidateTrigger.NextFireTimeUtc != null)
+                        {
+                            triggers.Add(candidateTrigger);
+                        }
+                        continue;
+                    }
+
+                    //var triggerToUpdate = session.Include<Trigger>(x=>x.JobKey).Load(candidateTrigger.Key);
+
+                    if (candidateTrigger.NextFireTimeUtc > noLaterThan + timeWindow)
+                    {
+                        break;
+                    }
+
+                    // If trigger's job is set as @DisallowConcurrentExecution, and it has already been added to result, then
+                    // put it back into the timeTriggers set and continue to search for next trigger.
+                    JobKey jobKey = new JobKey(candidateTrigger.JobName, candidateTrigger.Group);
+                    Job job = session.Load<Job>(candidateTrigger.JobKey);
+
+                    if (job.ConcurrentExecutionDisallowed)
+                    {
+                        if (acquiredJobKeysForNoConcurrentExec.Contains(jobKey))
+                        {
+                            continue; // go to next trigger in store.
+                        }
+                        acquiredJobKeysForNoConcurrentExec.Add(jobKey);
+                    }
+
+                    candidateTrigger.State = InternalTriggerState.Acquired;
+                    candidateTrigger.FireInstanceId = GetFiredTriggerRecordId();
+
+                    result.Add(candidateTrigger.Deserialize());
+
+                    if (firstAcquiredTriggerFireTime == null)
+                    {
+                        firstAcquiredTriggerFireTime = candidateTrigger.NextFireTimeUtc;
+                    }
+
+                    if (result.Count == maxCount)
+                    {
+                        break;
+                    }
                 }
-                //Log.Info("AcquireNextTriggers, Result:\n");
-                //result.ForEach(i => Console.Write("{0}\n", i.Key));
-                return result;
+                session.SaveChanges();
             }
+            //Log.Info("AcquireNextTriggers, Result:\n");
+            //result.ForEach(i => Console.Write("{0}\n", i.Key));
+            return result;
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void ReleaseAcquiredTrigger(IOperableTrigger trig)
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -1176,185 +1224,184 @@ namespace Quartz.Impl.RavenDB
         /// state.  Preference is to return an empty list if none of the triggers
         /// could be fired.
         /// </returns>
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public IList<TriggerFiredResult> TriggersFired(IList<IOperableTrigger> triggers)
         {
-            lock (lockObject)
+            List<TriggerFiredResult> results = new List<TriggerFiredResult>();
+            using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                List<TriggerFiredResult> results = new List<TriggerFiredResult>();
-                using (var session = DocumentStoreHolder.Store.OpenSession())
+                foreach (IOperableTrigger tr in triggers)
                 {
-                    foreach (IOperableTrigger tr in triggers)
-                    {
-                        // was the trigger deleted since being acquired?
-                        var trigger = session.Load<Trigger>(tr.Key.Name + "/" + tr.Key.Group);
+                    // was the trigger deleted since being acquired?
+                    var trigger = session.Load<Trigger>(tr.Key.Name + "/" + tr.Key.Group);
 
-                        // was the trigger completed, paused, blocked, etc. since being acquired?
-                        if (trigger?.State != InternalTriggerState.Acquired)
+                    // was the trigger completed, paused, blocked, etc. since being acquired?
+                    if (trigger?.State != InternalTriggerState.Acquired)
+                    {
+                        continue;
+                    }
+
+                    ICalendar cal = null;
+                    if (trigger.CalendarName != null)
+                    {
+                        cal = RetrieveCalendar(trigger.CalendarName);
+                        if (cal == null)
                         {
                             continue;
                         }
-
-                        ICalendar cal = null;
-                        if (trigger.CalendarName != null)
-                        {
-                            cal = RetrieveCalendar(trigger.CalendarName);
-                            if (cal == null)
-                            {
-                                continue;
-                            }
-                        }
-                        DateTimeOffset? prevFireTime = trigger.PreviousFireTimeUtc;
-
-                        var trig = trigger.Deserialize();
-                        trig.Triggered(cal);
-
-                        TriggerFiredBundle bndle = new TriggerFiredBundle(RetrieveJob(trig.JobKey),
-                            trig,
-                            cal,
-                            false, SystemTime.UtcNow(),
-                            trig.GetPreviousFireTimeUtc(), prevFireTime,
-                            trig.GetNextFireTimeUtc());
-
-                        IJobDetail job = bndle.JobDetail;
-
-                        trigger.UpdateFireTimes(trig);
-                        trigger.State = InternalTriggerState.Waiting;
-
-                        if (job.ConcurrentExecutionDisallowed)
-                        {
-                            var trigs = session.Query<Trigger>()
-                                .Where(t => Equals(t.Group, job.Key.Group) && Equals(t.JobName, job.Key.Name));
-
-                            foreach (var t in trigs)
-                            {
-                                if (t.State == InternalTriggerState.Waiting)
-                                {
-                                    t.State = InternalTriggerState.Blocked;
-                                }
-                                if (t.State == InternalTriggerState.Paused)
-                                {
-                                    t.State = InternalTriggerState.PausedAndBlocked;
-                                }
-                            }
-                            var sched = session.Load<Scheduler>(InstanceName);
-                            sched.BlockedJobs.Add(job.Key.Name + "/" + job.Key.Group);
-                        }
-
-                        results.Add(new TriggerFiredResult(bndle));
                     }
-                    session.SaveChanges();
+                    DateTimeOffset? prevFireTime = trigger.PreviousFireTimeUtc;
+
+                    var trig = trigger.Deserialize();
+                    trig.Triggered(cal);
+
+                    TriggerFiredBundle bndle = new TriggerFiredBundle(RetrieveJob(trig.JobKey),
+                        trig,
+                        cal,
+                        false, SystemTime.UtcNow(),
+                        trig.GetPreviousFireTimeUtc(), prevFireTime,
+                        trig.GetNextFireTimeUtc());
+
+                    IJobDetail job = bndle.JobDetail;
+
+                    trigger.UpdateFireTimes(trig);
+                    trigger.State = InternalTriggerState.Waiting;
+
+                    if (job.ConcurrentExecutionDisallowed)
+                    {
+                        var trigs = session.Query<Trigger>()
+                            .Where(t => Equals(t.Group, job.Key.Group) && Equals(t.JobName, job.Key.Name));
+
+                        foreach (var t in trigs)
+                        {
+                            if (t.State == InternalTriggerState.Waiting)
+                            {
+                                t.State = InternalTriggerState.Blocked;
+                            }
+                            if (t.State == InternalTriggerState.Paused)
+                            {
+                                t.State = InternalTriggerState.PausedAndBlocked;
+                            }
+                        }
+                        var sched = session.Load<Scheduler>(InstanceName);
+                        sched.BlockedJobs.Add(job.Key.Name + "/" + job.Key.Group);
+                    }
+
+                    results.Add(new TriggerFiredResult(bndle));
                 }
-                return results;
+                session.SaveChanges();
             }
+            return results;
+
         }
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public void TriggeredJobComplete(IOperableTrigger trig, IJobDetail jobDetail, SchedulerInstruction triggerInstCode)
         {
-            lock (lockObject)
+            using (var session = DocumentStoreHolder.Store.OpenSession())
             {
-                using (var session = DocumentStoreHolder.Store.OpenSession())
+                var trigger = session.Load<Trigger>(trig.Key.Name + "/" + trig.Key.Group);
+                var sched = session.Load<Scheduler>(InstanceName);
+
+                // It's possible that the job or trigger is null if it was deleted during execution
+                var job = session.Load<Job>(trig.JobKey.Name + "/" + trig.JobKey.Group);
+
+                if (job != null)
                 {
-                    var trigger = session.Load<Trigger>(trig.Key.Name + "/" + trig.Key.Group);
-                    var sched = session.Load<Scheduler>(InstanceName);
-
-                    // It's possible that the job or trigger is null if it was deleted during execution
-                    var job = session.Load<Job>(trig.JobKey.Name + "/" + trig.JobKey.Group);
-
-                    if (job != null)
+                    if (jobDetail.PersistJobDataAfterExecution)
                     {
-                        if (jobDetail.PersistJobDataAfterExecution)
+                        job.JobDataMap = jobDetail.JobDataMap;
+
+                    }
+                    if (job.ConcurrentExecutionDisallowed)
+                    {
+                        sched.BlockedJobs.Remove(job.Key);
+
+                        List<Trigger> trigs = session.Query<Trigger>()
+                            .Where(t => Equals(t.Group, job.Group) && Equals(t.JobName, job.Name))
+                            .ToList();
+
+                        foreach (Trigger t in trigs)
                         {
-                            job.JobDataMap = jobDetail.JobDataMap;
-
-                        }
-                        if (job.ConcurrentExecutionDisallowed)
-                        {
-                            sched.BlockedJobs.Remove(job.Key);
-
-                            List<Trigger> trigs = session.Query<Trigger>()
-                                .Where(t => Equals(t.Group, job.Group) && Equals(t.JobName, job.Name))
-                                .ToList();
-
-                            foreach (Trigger t in trigs)
+                            var triggerToUpdate = session.Load<Trigger>(t.Key);
+                            if (t.State == InternalTriggerState.Blocked)
                             {
-                                var triggerToUpdate = session.Load<Trigger>(t.Key);
-                                if (t.State == InternalTriggerState.Blocked)
-                                {
-                                    triggerToUpdate.State = InternalTriggerState.Waiting;
-                                }
-                                if (t.State == InternalTriggerState.PausedAndBlocked)
-                                {
-                                    triggerToUpdate.State = InternalTriggerState.Paused;
-                                }
+                                triggerToUpdate.State = InternalTriggerState.Waiting;
                             }
-
-                            signaler.SignalSchedulingChange(null);
+                            if (t.State == InternalTriggerState.PausedAndBlocked)
+                            {
+                                triggerToUpdate.State = InternalTriggerState.Paused;
+                            }
                         }
-                    }
-                    else
-                    {
-                        // even if it was deleted, there may be cleanup to do
-                        sched.BlockedJobs.Remove(jobDetail.Key.Name + "/" + jobDetail.Key.Group);
-                    }
 
-                    // check for trigger deleted during execution...
-                    if (trigger != null)
+                        signaler.SignalSchedulingChange(null);
+                    }
+                }
+                else
+                {
+                    // even if it was deleted, there may be cleanup to do
+                    sched.BlockedJobs.Remove(jobDetail.Key.Name + "/" + jobDetail.Key.Group);
+                }
+
+                // check for trigger deleted during execution...
+                if (trigger != null)
+                {
+                    if (triggerInstCode == SchedulerInstruction.DeleteTrigger)
                     {
-                        if (triggerInstCode == SchedulerInstruction.DeleteTrigger)
+                        // Deleting triggers
+                        DateTimeOffset? d = trig.GetNextFireTimeUtc();
+                        if (!d.HasValue)
                         {
-                            // Deleting triggers
-                            DateTimeOffset? d = trig.GetNextFireTimeUtc();
+                            // double check for possible reschedule within job 
+                            // execution, which would cancel the need to delete...
+                            d = trigger.NextFireTimeUtc;
                             if (!d.HasValue)
                             {
-                                // double check for possible reschedule within job 
-                                // execution, which would cancel the need to delete...
-                                d = trigger.NextFireTimeUtc;
-                                if (!d.HasValue)
-                                {
-                                    RemoveTrigger(trig.Key);
-                                }
-                                else
-                                {
-                                    //Deleting cancelled - trigger still active
-                                }
+                                RemoveTrigger(trig.Key);
                             }
                             else
                             {
-                                RemoveTrigger(trig.Key);
-                                signaler.SignalSchedulingChange(null);
+                                //Deleting cancelled - trigger still active
                             }
                         }
-                        else if (triggerInstCode == SchedulerInstruction.SetTriggerComplete)
+                        else
                         {
-                            trigger.State = InternalTriggerState.Complete;
-                            signaler.SignalSchedulingChange(null);
-                        }
-                        else if (triggerInstCode == SchedulerInstruction.SetTriggerError)
-                        {
-                            //Log.Info(string.Format(CultureInfo.InvariantCulture, "Trigger {0} set to ERROR State.", trigger.Key));
-                            trigger.State = InternalTriggerState.Error;
-                            signaler.SignalSchedulingChange(null);
-                        }
-                        else if (triggerInstCode == SchedulerInstruction.SetAllJobTriggersError)
-                        {
-                            //Log.Info(string.Format(CultureInfo.InvariantCulture, "All triggers of Job {0} set to ERROR State.", trigger.JobKey));
-                            SetAllTriggersOfJobToState(trig.JobKey, InternalTriggerState.Error);
-                            signaler.SignalSchedulingChange(null);
-                        }
-                        else if (triggerInstCode == SchedulerInstruction.SetAllJobTriggersComplete)
-                        {
-                            SetAllTriggersOfJobToState(trig.JobKey, InternalTriggerState.Complete);
+                            RemoveTrigger(trig.Key);
                             signaler.SignalSchedulingChange(null);
                         }
                     }
-                    session.SaveChanges();
+                    else if (triggerInstCode == SchedulerInstruction.SetTriggerComplete)
+                    {
+                        trigger.State = InternalTriggerState.Complete;
+                        signaler.SignalSchedulingChange(null);
+                    }
+                    else if (triggerInstCode == SchedulerInstruction.SetTriggerError)
+                    {
+                        //Log.Info(string.Format(CultureInfo.InvariantCulture, "Trigger {0} set to ERROR State.", trigger.Key));
+                        trigger.State = InternalTriggerState.Error;
+                        signaler.SignalSchedulingChange(null);
+                    }
+                    else if (triggerInstCode == SchedulerInstruction.SetAllJobTriggersError)
+                    {
+                        //Log.Info(string.Format(CultureInfo.InvariantCulture, "All triggers of Job {0} set to ERROR State.", trigger.JobKey));
+                        SetAllTriggersOfJobToState(trig.JobKey, InternalTriggerState.Error);
+                        signaler.SignalSchedulingChange(null);
+                    }
+                    else if (triggerInstCode == SchedulerInstruction.SetAllJobTriggersComplete)
+                    {
+                        SetAllTriggersOfJobToState(trig.JobKey, InternalTriggerState.Complete);
+                        signaler.SignalSchedulingChange(null);
+                    }
                 }
+                session.SaveChanges();
             }
         }
+
 
         /// <summary>
         /// Sets the State of all triggers of job to specified State.
         /// </summary>
+        [MethodImpl(MethodImplOptions.Synchronized)]
         protected virtual void SetAllTriggersOfJobToState(JobKey jobKey, InternalTriggerState state)
         {
             using (var session = DocumentStoreHolder.Store.OpenSession())
@@ -1379,7 +1426,9 @@ namespace Quartz.Impl.RavenDB
         [TimeSpanParseRule(TimeSpanParseRule.Milliseconds)]
         public virtual TimeSpan MisfireThreshold
         {
+            [MethodImpl(MethodImplOptions.Synchronized)]
             get { return misfireThreshold; }
+            [MethodImpl(MethodImplOptions.Synchronized)]
             set
             {
                 if (value.TotalMilliseconds < 1)

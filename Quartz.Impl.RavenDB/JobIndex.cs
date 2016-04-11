@@ -13,7 +13,9 @@ namespace Quartz.Impl.RavenDB
             {
                 Map = @"from doc in docs.Jobs
                         select new {
-	                        Group = doc.Group
+	                        Group = doc.Group,
+	                        RequestsRecovery = doc.RequestsRecovery,
+	                        Scheduler = doc.Scheduler
                         }"
             };
         }
