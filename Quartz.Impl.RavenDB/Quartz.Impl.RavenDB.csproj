@@ -72,7 +72,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="RecoverMisfiredJobsResult.cs" />
     <Compile Include="DocumentStoreHolder.cs" />
     <Compile Include="JobIndex.cs" />
     <Compile Include="ThreadPrinter.cs" />

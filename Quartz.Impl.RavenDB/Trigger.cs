@@ -27,7 +27,8 @@ namespace Quartz.Impl.RavenDB
         public DateTimeOffset? EndTimeUtc { get; set; }
         public DateTimeOffset StartTimeUtc { get; set; }
         public DateTimeOffset? NextFireTimeUtc { get; set; }
-        public long NextFireTimeTicks { get; set; } // Used for sorting triggers by time - more efficient than sorting strings
+        // Used for sorting triggers by time - more efficient than sorting strings
+        public long NextFireTimeTicks { get; set; } 
 
         public DateTimeOffset? PreviousFireTimeUtc { get; set; }
         public int Priority { get; set; }
@@ -219,7 +220,6 @@ namespace Quartz.Impl.RavenDB
 
             var trigger = triggerBuilder.Build();
 
-            // Iftah - should I allocate a new variable or cast 4 times?
             var returnTrigger = (IOperableTrigger)trigger;
             returnTrigger.SetNextFireTimeUtc(NextFireTimeUtc);
             returnTrigger.SetPreviousFireTimeUtc(PreviousFireTimeUtc);
@@ -276,7 +276,7 @@ namespace Quartz.Impl.RavenDB
         /// <filterpriority>2</filterpriority>
         public override int GetHashCode()
         {
-            return (ftc != null ? ftc.GetHashCode() : 0);
+            return ftc?.GetHashCode() ?? 0;
         }
     }
 
@@ -284,8 +284,8 @@ namespace Quartz.Impl.RavenDB
     {
         public int Compare(Trigger trig1, Trigger trig2)
         {
-            DateTimeOffset? t1 = trig1.NextFireTimeUtc;
-            DateTimeOffset? t2 = trig2.NextFireTimeUtc;
+            var t1 = trig1.NextFireTimeUtc;
+            var t2 = trig2.NextFireTimeUtc;
 
             if (t1 != null || t2 != null)
             {
@@ -310,13 +310,8 @@ namespace Quartz.Impl.RavenDB
                 }
             }
 
-            int comp = trig2.Priority - trig1.Priority;
-            if (comp != 0)
-            {
-                return comp;
-            }
-
-            return 0;
+            var comp = trig2.Priority - trig1.Priority;
+            return comp != 0 ? comp : 0;
         }
     }
 }

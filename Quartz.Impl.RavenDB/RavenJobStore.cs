@@ -6,25 +6,41 @@ using System.Threading;
 using System.Configuration;
 using System.Data.Common;
 using System.Runtime.CompilerServices;
-using System.Runtime.Remoting.Messaging;
 
 using Common.Logging;
 
 using Quartz.Collection;
+using Quartz.Core;
 using Quartz.Impl.Matchers;
 using Quartz.Spi;
+using Quartz.Simpl;
 
 using Raven.Abstractions.Commands;
 using Raven.Abstractions.Data;
 using Raven.Abstractions.Extensions;
-
-using Quartz.Simpl;
-
-using Raven.Abstractions.Indexing;
 using Raven.Client.Linq;
 
 namespace Quartz.Impl.RavenDB
 {
+    /// <summary> 
+    /// An implementation of <see cref="IJobStore" /> to use ravenDB as a persistent Job Store.
+    /// Provides an <see cref="IJob" />
+    /// and <see cref="ITrigger" /> storage mechanism for the
+    /// <see cref="QuartzScheduler" />'s use.
+    /// </summary>
+    /// <remarks>
+    /// Storage of <see cref="IJob" /> s and <see cref="ITrigger" /> s should be keyed
+    /// on the combination of their name and group for uniqueness.
+    /// </remarks>
+    /// <seealso cref="QuartzScheduler" />
+    /// <seealso cref="IJobStore" />
+    /// <seealso cref="ITrigger" />
+    /// <seealso cref="IJob" />
+    /// <seealso cref="IJobDetail" />
+    /// <seealso cref="JobDataMap" />
+    /// <seealso cref="ICalendar" />
+    /// <author>James House</author>
+    /// <author>Marko Lahma (.NET)</author>
     public class RavenJobStore : IJobStore
     {
         private TimeSpan misfireThreshold = TimeSpan.FromSeconds(5);
@@ -49,24 +65,17 @@ namespace Quartz.Impl.RavenDB
         {
             Log = LogManager.GetLogger(GetType());
 
+            var connectionStringSettings = ConfigurationManager.ConnectionStrings["quartznet-ravendb"];
             var stringBuilder = new DbConnectionStringBuilder
             {
-                ConnectionString = ConfigurationManager.ConnectionStrings["quartznet-ravendb"] != null ?
-                    ConfigurationManager.ConnectionStrings["quartznet-ravendb"].ConnectionString :
+                ConnectionString = connectionStringSettings != null ?
+                    connectionStringSettings.ConnectionString :
                     defaultConnectionString
             };
-
-
-            try
-            {
-                Url = stringBuilder["Url"] as string;
-                DefaultDatabase = stringBuilder["DefaultDatabase"] as string;
-            }
-            catch (Exception e)
-            {
-                Log.Warn("Check connection string", e);
-            }
-
+           
+            Url = stringBuilder["Url"] as string;
+            DefaultDatabase = stringBuilder["DefaultDatabase"] as string;
+         
             InstanceName = "UnitTestScheduler";
             InstanceId = "instance_two";
 
@@ -75,12 +84,19 @@ namespace Quartz.Impl.RavenDB
             new JobIndex().Execute(DocumentStoreHolder.Store);
         }
 
+        /// <summary>
+        /// Called by the QuartzScheduler before the <see cref="IJobStore" /> is
+        /// used, in order to give the it a chance to Initialize.
+        /// </summary>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void Initialize(ITypeLoadHelper loadHelper, ISchedulerSignaler s)
         {
             signaler = s;
         }
 
+        /// <summary>
+        /// Sets the schedulers's state
+        /// </summary>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void SetSchedulerState(string state)
         {
@@ -92,6 +108,10 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        /// <summary>
+        /// Called by the QuartzScheduler to inform the <see cref="IJobStore" /> that
+        /// the scheduler has started.
+        /// </summary>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void SchedulerStarted()
         {
@@ -108,12 +128,10 @@ namespace Quartz.Impl.RavenDB
                 {
                     throw new SchedulerConfigException("Failure occurred during job recovery.", se);
                 }
-
-
                 return;
             }
 
-            // Create new empty scheduler and store it
+            // If schefuler doesn't exist create new empty scheduler and store it
             var schedToStore = new Scheduler
             {
                 InstanceName = this.InstanceName,
@@ -129,24 +147,35 @@ namespace Quartz.Impl.RavenDB
                 session.Store(schedToStore, InstanceName);
                 session.SaveChanges();
             }
-
-
-
+            
             SetSchedulerState("Started");
         }
 
+        /// <summary>
+        /// Called by the QuartzScheduler to inform the JobStore that
+        /// the scheduler has been paused.
+        /// </summary>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void SchedulerPaused()
         {
             SetSchedulerState("Paused");
         }
 
+        /// <summary>
+        /// Called by the QuartzScheduler to inform the JobStore that
+        /// the scheduler has resumed after being paused.
+        /// </summary>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void SchedulerResumed()
         {
             SetSchedulerState("Resumed");
         }
 
+        /// <summary>
+        /// Called by the QuartzScheduler to inform the <see cref="IJobStore" /> that
+        /// it should free up all of it's resources because the scheduler is
+        /// shutting down.
+        /// </summary>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void Shutdown()
         {
@@ -243,6 +272,12 @@ namespace Quartz.Impl.RavenDB
             return Convert.ToString(value, CultureInfo.InvariantCulture);
         }
 
+        /// <summary>
+        /// Store the given <see cref="IJobDetail" /> and <see cref="ITrigger" />.
+        /// </summary>
+        /// <param name="newJob">The <see cref="IJobDetail" /> to be stored.</param>
+        /// <param name="newTrigger">The <see cref="ITrigger" /> to be stored.</param>
+        /// <throws>  ObjectAlreadyExistsException </throws>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void StoreJobAndTrigger(IJobDetail newJob, IOperableTrigger newTrigger)
         {
@@ -250,6 +285,11 @@ namespace Quartz.Impl.RavenDB
             StoreTrigger(newTrigger, true);
         }
 
+        /// <summary>
+        /// returns true if the given JobGroup is paused
+        /// </summary>
+        /// <param name="groupName"></param>
+        /// <returns></returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public bool IsJobGroupPaused(string groupName)
         {
@@ -260,6 +300,12 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        /// <summary>
+        /// returns true if the given TriggerGroup
+        /// is paused
+        /// </summary>
+        /// <param name="groupName"></param>
+        /// <returns></returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public bool IsTriggerGroupPaused(string groupName)
         {
@@ -267,6 +313,15 @@ namespace Quartz.Impl.RavenDB
 
         }
 
+        /// <summary>
+        /// Store the given <see cref="IJobDetail" />.
+        /// </summary>
+        /// <param name="newJob">The <see cref="IJobDetail" /> to be stored.</param>
+        /// <param name="replaceExisting">
+        /// If <see langword="true" />, any <see cref="IJob" /> existing in the
+        /// <see cref="IJobStore" /> with the same name and group should be
+        /// over-written.
+        /// </param>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void StoreJob(IJobDetail newJob, bool replaceExisting)
         {
@@ -295,7 +350,9 @@ namespace Quartz.Impl.RavenDB
             {
                 foreach (var pair in triggersAndJobs)
                 {
+                    // First store the current job
                     bulkInsert.Store(new Job(pair.Key, InstanceName), pair.Key.Key.Name + "/" + pair.Key.Key.Group);
+                    
                     // Storing all triggers for the current job
                     foreach (var trig in pair.Value)
                     {
@@ -322,10 +379,24 @@ namespace Quartz.Impl.RavenDB
                         bulkInsert.Store(trigger, trigger.Key);
                     }
                 }
-                // bulkInsert is disposed - same effect as session.SaveChanges()
-            }
+            } // bulkInsert is disposed - same effect as session.SaveChanges()
+
         }
 
+        /// <summary>
+        /// Remove (delete) the <see cref="IJob" /> with the given
+        /// key, and any <see cref="ITrigger" /> s that reference
+        /// it.
+        /// </summary>
+        /// <remarks>
+        /// If removal of the <see cref="IJob" /> results in an empty group, the
+        /// group should be removed from the <see cref="IJobStore" />'s list of
+        /// known group names.
+        /// </remarks>
+        /// <returns>
+        /// 	<see langword="true" /> if a <see cref="IJob" /> with the given name and
+        /// group was found and removed from the store.
+        /// </returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public bool RemoveJob(JobKey jobKey)
         {
@@ -357,6 +428,13 @@ namespace Quartz.Impl.RavenDB
             return result;
         }
 
+        /// <summary>
+        /// Retrieve the <see cref="IJobDetail" /> for the given
+        /// <see cref="IJob" />.
+        /// </summary>
+        /// <returns>
+        /// The desired <see cref="IJob" />, or null if there is no match.
+        /// </returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public IJobDetail RetrieveJob(JobKey jobKey)
         {
@@ -368,6 +446,14 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        /// <summary>
+        /// Store the given <see cref="ITrigger" />.
+        /// </summary>
+        /// <param name="newTrigger">The <see cref="ITrigger" /> to be stored.</param>
+        /// <param name="replaceExisting">If <see langword="true" />, any <see cref="ITrigger" /> existing in
+        /// the <see cref="IJobStore" /> with the same name and group should
+        /// be over-written.</param>
+        /// <throws>  ObjectAlreadyExistsException </throws>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void StoreTrigger(IOperableTrigger newTrigger, bool replaceExisting)
         {
@@ -408,6 +494,25 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        /// <summary>
+        /// Remove (delete) the <see cref="ITrigger" /> with the given key.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// If removal of the <see cref="ITrigger" /> results in an empty group, the
+        /// group should be removed from the <see cref="IJobStore" />'s list of
+        /// known group names.
+        /// </para>
+        /// <para>
+        /// If removal of the <see cref="ITrigger" /> results in an 'orphaned' <see cref="IJob" />
+        /// that is not 'durable', then the <see cref="IJob" /> should be deleted
+        /// also.
+        /// </para>
+        /// </remarks>
+        /// <returns>
+        /// 	<see langword="true" /> if a <see cref="ITrigger" /> with the given
+        /// name and group was found and removed from the store.
+        /// </returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public bool RemoveTrigger(TriggerKey triggerKey)
         {
@@ -445,6 +550,17 @@ namespace Quartz.Impl.RavenDB
             return result;
         }
 
+        /// <summary>
+        /// Remove (delete) the <see cref="ITrigger" /> with the
+        /// given name, and store the new given one - which must be associated
+        /// with the same job.
+        /// </summary>
+        /// <param name="triggerKey">The <see cref="ITrigger"/> to be replaced.</param>
+        /// <param name="newTrigger">The new <see cref="ITrigger" /> to be stored.</param>
+        /// <returns>
+        /// 	<see langword="true" /> if a <see cref="ITrigger" /> with the given
+        /// name and group was found and removed from the store.
+        /// </returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public bool ReplaceTrigger(TriggerKey triggerKey, IOperableTrigger newTrigger)
         {
@@ -460,6 +576,13 @@ namespace Quartz.Impl.RavenDB
             return wasRemoved;
         }
 
+        /// <summary>
+        /// Retrieve the given <see cref="ITrigger" />.
+        /// </summary>
+        /// <returns>
+        /// The desired <see cref="ITrigger" />, or null if there is no
+        /// match.
+        /// </returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public IOperableTrigger RetrieveTrigger(TriggerKey triggerKey)
         {
@@ -477,6 +600,14 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        /// <summary>
+        /// Determine whether a <see cref="ICalendar" /> with the given identifier already
+        /// exists within the scheduler.
+        /// </summary>
+        /// <remarks>
+        /// </remarks>
+        /// <param name="calName">the identifier to check for</param>
+        /// <returns>true if a calendar exists with the given identifier</returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public bool CalendarExists(string calName)
         {
@@ -498,6 +629,14 @@ namespace Quartz.Impl.RavenDB
             return answer;
         }
 
+        /// <summary>
+        /// Determine whether a <see cref="IJob" /> with the given identifier already
+        /// exists within the scheduler.
+        /// </summary>
+        /// <remarks>
+        /// </remarks>
+        /// <param name="jobKey">the identifier to check for</param>
+        /// <returns>true if a job exists with the given identifier</returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public bool CheckExists(JobKey jobKey)
         {
@@ -506,6 +645,14 @@ namespace Quartz.Impl.RavenDB
             return docMetaData != null;
         }
 
+        /// <summary>
+        /// Determine whether a <see cref="ITrigger" /> with the given identifier already
+        /// exists within the scheduler.
+        /// </summary>
+        /// <remarks>
+        /// </remarks>
+        /// <param name="triggerKey">the identifier to check for</param>
+        /// <returns>true if a trigger exists with the given identifier</returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public bool CheckExists(TriggerKey triggerKey)
         {
@@ -514,6 +661,12 @@ namespace Quartz.Impl.RavenDB
             return docMetaData != null;
         }
 
+        /// <summary>
+        /// Clear (delete!) all scheduling data - all <see cref="IJob"/>s, <see cref="ITrigger" />s
+        /// <see cref="ICalendar" />s.
+        /// </summary>
+        /// <remarks>
+        /// </remarks>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void ClearAllSchedulingData()
         {
@@ -521,7 +674,12 @@ namespace Quartz.Impl.RavenDB
             op.WaitForCompletion();
         }
 
-        /// <exception cref="ObjectAlreadyExistsException">Condition.</exception>
+        /// <summary>
+        /// Store the <see cref="ICalendar" /> with the given identifier.
+        /// </summary>
+        /// <remarks>
+        /// </remarks>
+        /// <param name="name">the identifier for the calendar</param>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void StoreCalendar(string name, ICalendar calendar, bool replaceExisting, bool updateTriggers)
         {
@@ -573,6 +731,20 @@ namespace Quartz.Impl.RavenDB
             }
         }
 
+        /// <summary>
+        /// Remove (delete) the <see cref="ICalendar" /> with the
+        /// given name.
+        /// </summary>
+        /// <remarks>
+        /// If removal of the <see cref="ICalendar" /> would result in
+        /// <see cref="ITrigger" />s pointing to non-existent calendars, then a
+        /// <see cref="JobPersistenceException" /> will be thrown.
+        /// </remarks>
+        /// <param name="calName">The name of the <see cref="ICalendar" /> to be removed.</param>
+        /// <returns>
+        /// 	<see langword="true" /> if a <see cref="ICalendar" /> with the given name
+        /// was found and removed from the store.
+        /// </returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public bool RemoveCalendar(string calName)
         {
@@ -592,6 +764,14 @@ namespace Quartz.Impl.RavenDB
             return true;
         }
 
+        /// <summary>
+        /// Retrieve the given <see cref="ITrigger" />.
+        /// </summary>
+        /// <param name="calName">The name of the <see cref="ICalendar" /> to be retrieved.</param>
+        /// <returns>
+        /// The desired <see cref="ICalendar" />, or null if there is no
+        /// match.
+        /// </returns>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public ICalendar RetrieveCalendar(string calName)
         {
@@ -1295,6 +1475,13 @@ namespace Quartz.Impl.RavenDB
 
         }
 
+        /// <summary>
+        /// Inform the <see cref="IJobStore" /> that the scheduler has completed the
+        /// firing of the given <see cref="ITrigger" /> (and the execution its
+        /// associated <see cref="IJob" />), and that the <see cref="JobDataMap" />
+        /// in the given <see cref="IJobDetail" /> should be updated if the <see cref="IJob" />
+        /// is stateful.
+        /// </summary>
         [MethodImpl(MethodImplOptions.Synchronized)]
         public void TriggeredJobComplete(IOperableTrigger trig, IJobDetail jobDetail, SchedulerInstruction triggerInstCode)
         {
@@ -1377,13 +1564,11 @@ namespace Quartz.Impl.RavenDB
                     }
                     else if (triggerInstCode == SchedulerInstruction.SetTriggerError)
                     {
-                        //Log.Info(string.Format(CultureInfo.InvariantCulture, "Trigger {0} set to ERROR State.", trigger.Key));
                         trigger.State = InternalTriggerState.Error;
                         signaler.SignalSchedulingChange(null);
                     }
                     else if (triggerInstCode == SchedulerInstruction.SetAllJobTriggersError)
                     {
-                        //Log.Info(string.Format(CultureInfo.InvariantCulture, "All triggers of Job {0} set to ERROR State.", trigger.JobKey));
                         SetAllTriggersOfJobToState(trig.JobKey, InternalTriggerState.Error);
                         signaler.SignalSchedulingChange(null);
                     }
