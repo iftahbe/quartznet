@@ -55,7 +55,7 @@ namespace Quartz.Impl.RavenDB
         public string InstanceName { get; set; }
         public int ThreadPoolSize { get; set; }
 
-        public static string defaultConnectionString = "Url=http://localhost.fiddler:8080;DefaultDatabase=IftahDB";
+        public static string defaultConnectionString = "Url=http://localhost:8080;DefaultDatabase=MyDatabaseName";
         public static string Url { get; set; }
         public static string DefaultDatabase { get; set; }
 

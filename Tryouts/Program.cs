@@ -33,10 +33,10 @@ namespace Tryouts
                 ["quartz.threadPool.threadCount"] = "1",
                 ["quartz.threadPool.threadPriority"] = "Normal",
 
+                ["quartz.jobStore.type"] = "Quartz.Impl.RavenDB.RavenJobStore, Quartz.Impl.RavenDB",
 
-   /*            
-              
-                ["quartz.jobStore.misfireThreshold"] = "60000",
+  
+               /* ["quartz.jobStore.misfireThreshold"] = "60000",
                 ["quartz.jobStore.type"] = "Quartz.Impl.AdoJobStore.JobStoreTX, Quartz",
                 ["quartz.jobStore.useProperties"] = "false",
                 ["quartz.jobStore.dataSource"] = "default",
