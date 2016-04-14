@@ -27,14 +27,14 @@ namespace Tryouts
 
             NameValueCollection properties = new NameValueCollection
             {
+                // Setting some scheduler properties
                 ["quartz.scheduler.instanceName"] = "QuartzRavenDBDemo",
                 ["quartz.scheduler.instanceId"] = "instance_one",
                 ["quartz.threadPool.type"] = "Quartz.Simpl.SimpleThreadPool, Quartz",
                 ["quartz.threadPool.threadCount"] = "1",
                 ["quartz.threadPool.threadPriority"] = "Normal",
-
+                // Setting RavenDB as the persisted JobStore
                 ["quartz.jobStore.type"] = "Quartz.Impl.RavenDB.RavenJobStore, Quartz.Impl.RavenDB",
-
             };
 
             try
@@ -45,49 +45,49 @@ namespace Tryouts
                 scheduler.Start();
 
                 IJobDetail emptyFridgeJob = JobBuilder.Create<EmptyFridge>()
-                    .WithIdentity("emptyFridgeJob", "group1")
+                    .WithIdentity("EmptyFridgeJob", "Office")
                     .Build();
 
                 IJobDetail turnOffLightsJob = JobBuilder.Create<TurnOffLights>()
-                    .WithIdentity("turnOffLightsJob", "group1")
+                    .WithIdentity("TurnOffLightsJob", "Office")
                     .Build();
 
                 IJobDetail checkAliveJob = JobBuilder.Create<CheckAlive>()
-                    .WithIdentity("checkAliveJob", "group1")
+                    .WithIdentity("CheckAliveJob", "Office")
                     .Build();
 
-                // Weekly trigger on Friday at 10 AM
+                // Weekly, Friday at 10 AM (Cron Trigger)
                 var emptyFridgeTrigger = TriggerBuilder.Create()
-                    .WithIdentity("emptyFridgeTrigger", "group1")
+                    .WithIdentity("EmptyFridge", "Office")
                     .WithCronSchedule("0 0 10 ? * FRI")
-                    .ForJob("emptyFridgeJob", "group1")
+                    .ForJob("EmptyFridgeJob", "Office")
                     .Build();
 
-                // Daily trigger at 6 PM
+                // Daily at 6 PM (Daily Interval Trigger)
                 var turnOffLightsTrigger = TriggerBuilder.Create()
-                    .WithIdentity("turnOffLightsTrigger", "group1")
-                    .WithCronSchedule("0 0 18 * * ?")
-                    .ForJob("turnOffLightsJob", "group1")
+                    .WithIdentity("TurnOffLights", "Office")
+                    .WithDailyTimeIntervalSchedule(s => s
+                        .WithIntervalInHours(24)
+                        .OnEveryDay()
+                        .StartingDailyAt(TimeOfDay.HourAndMinuteOfDay(18, 0)))
                     .Build();
 
-                // Periodic check trigger every 10 seconds
+                // Periodic check every 10 seconds (Simple Trigger)
                 ITrigger checkAliveTrigger = TriggerBuilder.Create()
-                    .WithIdentity("checkAliveTrigger", "group1")
-                    .StartNow()
+                    .WithIdentity("CheckAlive", "Office")
+                    .StartAt(DateTime.UtcNow.AddSeconds(3))
                     .WithSimpleSchedule(x => x
                         .WithIntervalInSeconds(10)
                         .RepeatForever())
                     .Build();
-     
 
+                scheduler.ScheduleJob(checkAliveJob, checkAliveTrigger);
                 scheduler.ScheduleJob(emptyFridgeJob, emptyFridgeTrigger);
                 scheduler.ScheduleJob(turnOffLightsJob, turnOffLightsTrigger);
-                scheduler.ScheduleJob(checkAliveJob, checkAliveTrigger);
 
                 // some sleep to show what's happening
                 Thread.Sleep(TimeSpan.FromSeconds(600));
 
-                // and last shut down the scheduler when you are ready to close your program
                 scheduler.Shutdown();
             }
             catch (SchedulerException se)
@@ -100,7 +100,6 @@ namespace Tryouts
         }
     }
 
-    [DisallowConcurrentExecution]
     [PersistJobDataAfterExecution]
     public class EmptyFridge : IJob
     {
@@ -111,7 +110,6 @@ namespace Tryouts
 
     }
 
-    [DisallowConcurrentExecution]
     [PersistJobDataAfterExecution]
     public class TurnOffLights : IJob
     {
@@ -122,7 +120,6 @@ namespace Tryouts
 
     }
 
-    [DisallowConcurrentExecution]
     [PersistJobDataAfterExecution]
     public class CheckAlive : IJob
     {
@@ -135,9 +132,9 @@ namespace Tryouts
 
 }
 
-
-
 /*
+
+
 using System;
 using System.Collections.Specialized;
 using System.Collections.Generic;
@@ -239,11 +236,10 @@ namespace Tryouts
                 ITrigger trigger4 = TriggerBuilder.Create()
                     .WithIdentity("calendarTrigger", "group2")
                     .StartNow()
-                    .WithCalendarIntervalSchedule()
-                    .WithSimpleSchedule(x => x
+                    .WithCalendarIntervalSchedule(x => x
                         .WithIntervalInSeconds(3)
                         .RepeatForever())
-                    //.ModifiedByCalendar("myHolidays") // but not on holidays
+                    .ModifiedByCalendar("myHolidays") // but not on holidays
                     .Build();
 
                 // Adding calendar for exluding days - triggers won't work on those days
