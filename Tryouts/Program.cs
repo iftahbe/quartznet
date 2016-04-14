@@ -27,6 +27,146 @@ namespace Tryouts
 
             NameValueCollection properties = new NameValueCollection
             {
+                ["quartz.scheduler.instanceName"] = "QuartzRavenDBDemo",
+                ["quartz.scheduler.instanceId"] = "instance_one",
+                ["quartz.threadPool.type"] = "Quartz.Simpl.SimpleThreadPool, Quartz",
+                ["quartz.threadPool.threadCount"] = "1",
+                ["quartz.threadPool.threadPriority"] = "Normal",
+
+                ["quartz.jobStore.type"] = "Quartz.Impl.RavenDB.RavenJobStore, Quartz.Impl.RavenDB",
+
+            };
+
+            try
+            {
+
+                ISchedulerFactory sf = new StdSchedulerFactory(properties);
+                IScheduler scheduler = sf.GetScheduler();
+                scheduler.Start();
+
+                IJobDetail emptyFridgeJob = JobBuilder.Create<EmptyFridge>()
+                    .WithIdentity("emptyFridgeJob", "group1")
+                    .Build();
+
+                IJobDetail turnOffLightsJob = JobBuilder.Create<TurnOffLights>()
+                    .WithIdentity("turnOffLightsJob", "group1")
+                    .Build();
+
+                IJobDetail checkAliveJob = JobBuilder.Create<CheckAlive>()
+                    .WithIdentity("checkAliveJob", "group1")
+                    .Build();
+
+                // Weekly trigger on Friday at 10 AM
+                var emptyFridgeTrigger = TriggerBuilder.Create()
+                    .WithIdentity("emptyFridgeTrigger", "group1")
+                    .WithCronSchedule("0 0 10 ? * FRI")
+                    .ForJob("emptyFridgeJob", "group1")
+                    .Build();
+
+                // Daily trigger at 6 PM
+                var turnOffLightsTrigger = TriggerBuilder.Create()
+                    .WithIdentity("turnOffLightsTrigger", "group1")
+                    .WithCronSchedule("0 0 18 * * ?")
+                    .ForJob("turnOffLightsJob", "group1")
+                    .Build();
+
+                // Periodic check trigger every 10 seconds
+                ITrigger checkAliveTrigger = TriggerBuilder.Create()
+                    .WithIdentity("checkAliveTrigger", "group1")
+                    .StartNow()
+                    .WithSimpleSchedule(x => x
+                        .WithIntervalInSeconds(10)
+                        .RepeatForever())
+                    .Build();
+     
+
+                scheduler.ScheduleJob(emptyFridgeJob, emptyFridgeTrigger);
+                scheduler.ScheduleJob(turnOffLightsJob, turnOffLightsTrigger);
+                scheduler.ScheduleJob(checkAliveJob, checkAliveTrigger);
+
+                // some sleep to show what's happening
+                Thread.Sleep(TimeSpan.FromSeconds(600));
+
+                // and last shut down the scheduler when you are ready to close your program
+                scheduler.Shutdown();
+            }
+            catch (SchedulerException se)
+            {
+                Console.WriteLine(se);
+            }
+
+            Console.WriteLine("Press any key to close the application");
+            Console.ReadKey();
+        }
+    }
+
+    [DisallowConcurrentExecution]
+    [PersistJobDataAfterExecution]
+    public class EmptyFridge : IJob
+    {
+        public void Execute(IJobExecutionContext context)
+        {
+            Console.WriteLine("Emptying the fridge...");
+        }
+
+    }
+
+    [DisallowConcurrentExecution]
+    [PersistJobDataAfterExecution]
+    public class TurnOffLights : IJob
+    {
+        public void Execute(IJobExecutionContext context)
+        {
+            Console.WriteLine("Turning lights off...");
+        }
+
+    }
+
+    [DisallowConcurrentExecution]
+    [PersistJobDataAfterExecution]
+    public class CheckAlive : IJob
+    {
+        public void Execute(IJobExecutionContext context)
+        {
+            Console.WriteLine("Verifying site is up...");
+        }
+
+    }
+
+}
+
+
+
+/*
+using System;
+using System.Collections.Specialized;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Threading;
+
+using Quartz;
+using Quartz.Collection;
+using Quartz.Impl;
+using Quartz.Impl.Calendar;
+using Quartz.Impl.RavenDB;
+using Quartz.Impl.Triggers;
+using Quartz.Simpl;
+using Quartz.Spi;
+
+namespace Tryouts
+{
+    internal class Program
+    {
+
+        private static void Main(string[] args)
+        {
+            Common.Logging.LogManager.Adapter = new Common.Logging.Simple.ConsoleOutLoggerFactoryAdapter
+            {
+                Level = Common.Logging.LogLevel.Info
+            };
+
+            NameValueCollection properties = new NameValueCollection
+            {
                 ["quartz.scheduler.instanceName"] = "TestScheduler",
                 ["quartz.scheduler.instanceId"] = "instance_one",
                 ["quartz.threadPool.type"] = "Quartz.Simpl.SimpleThreadPool, Quartz",
@@ -44,7 +184,7 @@ namespace Tryouts
                 ["quartz.jobStore.lockHandler.type"] = "Quartz.Impl.AdoJobStore.UpdateLockRowSemaphore, Quartz",
                 ["quartz.jobStore.driverDelegateType"] = "Quartz.Impl.AdoJobStore.SqlServerDelegate, Quartz",
                 ["quartz.dataSource.default.connectionString"] = "Server=DESKTOP-2AM9NOM\\SQLEXPRESS;Database=IftahDB;Trusted_Connection=True;",
-                ["quartz.dataSource.default.provider"] = "SqlServer-20"*/
+                ["quartz.dataSource.default.provider"] = "SqlServer-20"#1#
                 
             };
             
@@ -174,3 +314,4 @@ namespace Tryouts
     }
 
 }
+*/
