@@ -5,8 +5,6 @@ using Quartz.Impl.Triggers;
 using Quartz.Simpl;
 using Quartz.Spi;
 
-using Raven.Client.Linq.Indexing;
-
 namespace Quartz.Impl.RavenDB
 {
     public class Trigger
@@ -253,7 +251,7 @@ namespace Quartz.Impl.RavenDB
 
         public override bool Equals(object obj)
         {
-            return (obj is TriggerComparator);
+            return obj is TriggerComparator;
         }
 
         /// <summary>
