@@ -259,6 +259,7 @@ namespace Tryouts
                 scheduler.ScheduleJob(job1, triggerSet, true);
                 scheduler.ScheduleJob(job2, triggerSet2, true);
 
+                scheduler.UnscheduleJob(trigger1.Key);
                 // some sleep to show what's happening
                 Thread.Sleep(TimeSpan.FromSeconds(600));
 

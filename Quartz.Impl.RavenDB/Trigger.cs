@@ -28,7 +28,7 @@ namespace Quartz.Impl.RavenDB
         public DateTimeOffset StartTimeUtc { get; set; }
         public DateTimeOffset? NextFireTimeUtc { get; set; }
         // Used for sorting triggers by time - more efficient than sorting strings
-        public long NextFireTimeTicks { get; set; } 
+        public long NextFireTimeTicks { get; set; }
 
         public DateTimeOffset? PreviousFireTimeUtc { get; set; }
         public int Priority { get; set; }
@@ -65,7 +65,7 @@ namespace Quartz.Impl.RavenDB
         {
             public int RepeatCount { get; set; }
             public IntervalUnit RepeatIntervalUnit { get; set; }
-            public int RepeatInterval { get; set; }        
+            public int RepeatInterval { get; set; }
             public TimeOfDay StartTimeOfDay { get; set; }
             public TimeOfDay EndTimeOfDay { get; set; }
             public Collection.ISet<DayOfWeek> DaysOfWeek { get; set; }
@@ -171,16 +171,16 @@ namespace Quartz.Impl.RavenDB
                .WithPriority(Priority)
                .StartAt(StartTimeUtc)
                .EndAt(EndTimeUtc)
-               .ForJob(new JobKey(JobName,Group))
+               .ForJob(new JobKey(JobName, Group))
                .UsingJobData(new JobDataMap(JobDataMap));
-            
+
 
             if (Cron != null)
             {
                 triggerBuilder = triggerBuilder.WithCronSchedule(Cron.CronExpression, builder =>
                 {
                     builder
-                        .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById(Cron.TimeZoneId)); 
+                        .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById(Cron.TimeZoneId));
                 });
             }
             else if (Simp != null)
@@ -238,7 +238,7 @@ namespace Quartz.Impl.RavenDB
         }
     }
 
-    
+
 
     internal class TriggerComparator : IComparer<Trigger>, IEquatable<TriggerComparator>
     {
