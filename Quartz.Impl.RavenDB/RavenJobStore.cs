@@ -54,10 +54,10 @@ namespace Quartz.Impl.RavenDB
         public string InstanceName { get; set; }
         public int ThreadPoolSize { get; set; }
 
-        public static string defaultConnectionString = "Url=http://localhost:8080;DefaultDatabase=MyDatabaseName";
+        public static string defaultConnectionString = "Url=http://localhost:8080;DefaultDatabase=MyDatabaseName;ApiKey=YourKey";
         public static string Url { get; set; }
         public static string DefaultDatabase { get; set; }
-
+        public static string ApiKey { get; set; }
         protected ILog Log { get; }
 
         public RavenJobStore()
@@ -74,7 +74,8 @@ namespace Quartz.Impl.RavenDB
            
             Url = stringBuilder["Url"] as string;
             DefaultDatabase = stringBuilder["DefaultDatabase"] as string;
-         
+            ApiKey = stringBuilder.ContainsKey("ApiKey") ? stringBuilder["ApiKey"] as string : null;
+
             InstanceName = "UnitTestScheduler";
             InstanceId = "instance_two";
 
@@ -249,6 +250,13 @@ namespace Quartz.Impl.RavenDB
                     RemoveTrigger(new TriggerKey(trigger.Name, trigger.Group));
                 }
 
+                using (var session = DocumentStoreHolder.Store.OpenSession())
+                {
+
+                    var schedToUpdate = session.Load<Scheduler>(InstanceName);
+                    schedToUpdate.State = "Started";
+                    session.SaveChanges();
+                }
             }
             catch (Exception e)
             {
@@ -1365,8 +1373,14 @@ namespace Quartz.Impl.RavenDB
         [MethodImpl(MethodImplOptions.Synchronized)]
         protected virtual bool ApplyMisfire(Trigger trigger)
         {
+            DateTimeOffset misfireTime = SystemTime.UtcNow();
+            if (MisfireThreshold > TimeSpan.Zero)
+            {
+                misfireTime = misfireTime.AddMilliseconds(-1 * MisfireThreshold.TotalMilliseconds);
+            }
+
             DateTimeOffset? tnft = trigger.NextFireTimeUtc;
-            if (!tnft.HasValue || tnft.Value > MisfireTime
+            if (!tnft.HasValue || tnft.Value > misfireTime
                 || trigger.MisfireInstruction == MisfireInstruction.IgnoreMisfirePolicy)
             {
                 return false;
@@ -1382,11 +1396,11 @@ namespace Quartz.Impl.RavenDB
             var trig = trigger.Deserialize();
             signaler.NotifyTriggerListenersMisfired(trig);
             trig.UpdateAfterMisfire(cal);
+            trigger.UpdateFireTimes(trig);
 
             if (!trig.GetNextFireTimeUtc().HasValue)
             {
                 signaler.NotifySchedulerListenersFinalized(trig);
-                trigger.UpdateFireTimes(trig);
                 trigger.State = InternalTriggerState.Complete;
 
             }
@@ -1420,8 +1434,7 @@ namespace Quartz.Impl.RavenDB
             using (var session = DocumentStoreHolder.Store.OpenSession())
             {
                 var triggersQuery = session.Query<Trigger>()
-                    .Where(t => (t.State == InternalTriggerState.Waiting) && (t.NextFireTimeUtc <= (noLaterThan + timeWindow).UtcDateTime) &&
-                                ((t.MisfireInstruction == -1) || ((t.MisfireInstruction != -1) && (t.NextFireTimeUtc >= MisfireTime))))
+                    .Where(t => (t.State == InternalTriggerState.Waiting) && (t.NextFireTimeUtc <= (noLaterThan + timeWindow).UtcDateTime))
                     .OrderBy(t => t.NextFireTimeTicks)
                     .ThenByDescending(t => t.Priority)
                     .ToList();
