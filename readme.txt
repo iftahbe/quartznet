@@ -1,4 +1,4 @@
-QUARTZ JOB SCHEDULER .NET, 2.3.3, Jul 9, 2015
+QUARTZ JOB SCHEDULER .NET, 2.2.2, Feb 9, 2014
 -----------------------------------------------------------------
 
 http://www.quartz-scheduler.net/
@@ -36,4 +36,4 @@ This release corresponds to Java Quartz version 2.2.
 
 For API documentation, please refer to Quartz.NET site: 
 
-   http://apidoc.quartz-scheduler.net/
+   http://www.quartz-scheduler.net/apidoc/

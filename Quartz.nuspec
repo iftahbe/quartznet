@@ -3,14 +3,14 @@
   <metadata>
     <id>Quartz</id>
     <title>Quartz.NET</title>
-    <version>0.0.0.0</version>
+    <version>2.2.2</version>
     <authors>Marko Lahma</authors>
     <description>Quartz.NET Scheduling Framework for .NET Platform</description>
     <language>en-US</language>
     <projectUrl>http://www.quartz-scheduler.net/</projectUrl>
     <licenseUrl>http://www.apache.org/licenses/LICENSE-2.0</licenseUrl>
     <dependencies>
-      <dependency id="Common.Logging" version="3.0.0" />
+      <dependency id="Common.Logging" version="2.1.2" />
     </dependencies>
   </metadata>
   <files>
